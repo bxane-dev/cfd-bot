@@ -279,6 +279,8 @@ if "%BXANE_ANSI%"=="1" if defined ESC (
     echo ^|                       BY bxane                       ^|
     echo ============================================================
   )
+  <nul set /p "=                    %ESC%]8;;https://guns.lol/bxane%ESC%\https://guns.lol/bxane%ESC%]8;;%ESC%\"
+  echo.
   <nul set /p "=%ESC%[12;r%ESC%[12;1H"
   set "BXANE_STICKY=1"
   exit /b 0
@@ -292,6 +294,7 @@ if exist "%~dp0BXANE.txt" (
   echo ^|                       BY bxane                       ^|
   echo ============================================================
 )
+echo                     https://guns.lol/bxane
 echo.
 exit /b 0
 
