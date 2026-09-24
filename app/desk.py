@@ -20,7 +20,9 @@ from main import (
     load_state,
     make_broker,
     resolved_markets,
+    resolve_manual_trade_protection,
     run_once,
+    save_state,
     sync_market_rules,
 )
 from risk import RiskManager
@@ -129,8 +131,12 @@ class Desk:
             except (TypeError, ValueError):
                 unrealized = None
 
+        deal_id = str(getattr(position, "deal_id", None) or getattr(position, "ticket", "") or "")
+        proposal = (self.state.get("pending_manual_protection") or {}).get(deal_id)
+
         return {
             "ticket": getattr(position, "ticket", None),
+            "deal_id": deal_id,
             "symbol": symbol,
             "market": market.name if market else symbol,
             "side": getattr(position, "side", None),
@@ -143,6 +149,7 @@ class Desk:
             "unrealized_pnl": round(unrealized, 2) if unrealized is not None else None,
             "pnl_currency": getattr(position, "currency", None) or currency,
             "pnl_estimated": broker_upl is None,
+            "protection_proposal": dict(proposal) if isinstance(proposal, dict) else None,
         }
 
     def snapshot(self, force: bool = False) -> dict:
@@ -302,6 +309,24 @@ class Desk:
             pass
         self.last_error = ""
         return {**self.snapshot(force=True), "risk_reset": snap}
+
+    def resolve_manual_protection(self, deal_id: str, apply: bool) -> dict:
+        with self._lock:
+            result = resolve_manual_trade_protection(
+                self.broker,
+                self.state,
+                deal_id,
+                apply=bool(apply),
+            )
+            save_state(self.state)
+            self._snapshot_cache = None
+            if result.get("ok"):
+                self.last_error = ""
+            else:
+                self.last_error = str(result.get("message") or "SL/TP confirmation failed")
+            payload = self.snapshot(force=True)
+            payload["protection_result"] = result
+            return payload
 
     def _loop(self) -> None:
         while self.running:
