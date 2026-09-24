@@ -11,11 +11,13 @@ import sys
 import textwrap
 import threading
 import time
+import webbrowser
 from collections import deque
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BANNER_PATH = ROOT / "BXANE.txt"
+PROFILE_URL = "https://guns.lol/bxane"
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
@@ -40,7 +42,10 @@ def _banner() -> list[str]:
         text = BANNER_PATH.read_text(encoding="utf-8").rstrip("\r\n")
     except Exception:
         text = "BXANE"
-    return text.splitlines() or ["BXANE"]
+    lines = text.splitlines() or ["BXANE"]
+    if not any(PROFILE_URL in line for line in lines):
+        lines.append("                    " + PROFILE_URL)
+    return lines
 
 
 def _clean(text: str) -> str:
@@ -77,7 +82,15 @@ class Screen:
         size = shutil.get_terminal_size((110, 32))
         width, height = max(40, size.columns), max(16, size.lines)
 
-        header = [line[:width] for line in self.banner]
+        header: list[str] = []
+        for line in self.banner:
+            visible = line[:width]
+            if self.vt and PROFILE_URL in visible:
+                visible = visible.replace(
+                    PROFILE_URL,
+                    f"\x1b]8;;{PROFILE_URL}\x1b\\{PROFILE_URL}\x1b]8;;\x1b\\",
+                )
+            header.append(visible)
         header.append("")
         header.append("─" * min(width, 110))
 
@@ -174,6 +187,19 @@ def run(mode: str) -> int:
                     dirty = True
             except queue.Empty:
                 pass
+
+            if os.name == "nt":
+                try:
+                    import msvcrt
+
+                    while msvcrt.kbhit():
+                        key = msvcrt.getwch().lower()
+                        if key == "b":
+                            webbrowser.open(PROFILE_URL, new=2)
+                            logs.append(f"Opened {PROFILE_URL} in your browser.")
+                            dirty = True
+                except Exception:
+                    pass
 
             now = time.monotonic()
             size = shutil.get_terminal_size((110, 32))
