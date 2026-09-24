@@ -126,7 +126,9 @@ def evaluate_squeeze(df: pd.DataFrame, cfg: dict, market: Market) -> Signal:
     mid = float(sma(df["close"], n).iloc[-1])
     if price > mid:
         return atr_bracket(price, a, market, cfg, "buy", f"{market.name} squeeze release up")
-    return atr_bracket(price, a, market, cfg, "sell", f"{market.name} squeeze release down")
+    if price < mid:
+        return atr_bracket(price, a, market, cfg, "sell", f"{market.name} squeeze release down")
+    return empty("squeeze released at midline")
 
 
 def evaluate_stochastic(df: pd.DataFrame, cfg: dict, market: Market) -> Signal:
