@@ -4,6 +4,8 @@ import time
 import unittest
 from datetime import datetime, timezone
 
+import pandas as pd
+
 import app  # noqa: F401 - keeps legacy top-level imports available
 
 from broker.capital import CapitalBroker
@@ -17,12 +19,14 @@ from main import (
     effective_trade_cfg,
     enabled_markets,
     portfolio_adjusted_protection,
+    resolve_manual_trade_protection,
     resolved_markets,
     retry_scan_due,
     runtime_lookback_bars,
     sync_manual_trade_protection,
     terminal_scan_due,
 )
+from strategy.indicators import rsi, supertrend
 
 
 class RuntimeRegressionTests(unittest.TestCase):
@@ -149,7 +153,7 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertEqual(sized.reason, "bootstrap minimum lot")
         self.assertAlmostEqual(sized.lots, 0.01)
 
-    def test_manual_trade_gets_bot_sl_tp_once_and_is_not_overwritten(self):
+    def test_manual_trade_sl_tp_waits_for_confirmation_then_applies_once(self):
         calls = []
 
         class Broker:
@@ -166,6 +170,7 @@ class RuntimeRegressionTests(unittest.TestCase):
             "manual_protection_initialized": True,
             "bot_deal_ids": {},
             "manual_protection": {},
+            "pending_manual_protection": {},
             "recommendations": {
                 "gold": {
                     "time": now,
@@ -179,6 +184,8 @@ class RuntimeRegressionTests(unittest.TestCase):
         cfg = {
             "manual_trade_protection": {
                 "enabled": True,
+                "require_confirmation": True,
+                "portfolio_based": False,
                 "max_recommendation_age_seconds": 300,
                 "require_matching_side": True,
                 "ignore_existing_on_first_start": True,
@@ -195,26 +202,84 @@ class RuntimeRegressionTests(unittest.TestCase):
             deal_id="manual-1",
         )
 
-        class Risk:
-            def snapshot(self, equity):
-                return {"per_trade": 2.0}
-
-        changed = sync_manual_trade_protection(
-            cfg, Broker(), state, [pos], equity=100.0, risk=Risk()
-        )
+        changed = sync_manual_trade_protection(cfg, Broker(), state, [pos])
         self.assertTrue(changed)
+        self.assertEqual(calls, [])
+        self.assertEqual(
+            state["pending_manual_protection"]["manual-1"]["status"],
+            "awaiting_confirmation",
+        )
+        self.assertNotIn("manual-1", state["manual_protection"])
+
+        resolved = resolve_manual_trade_protection(
+            Broker(), state, "manual-1", apply=True
+        )
+        self.assertTrue(resolved["ok"])
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0][:3], ("manual-1", 98.0, 106.0))
-        self.assertEqual(state["manual_protection"]["manual-1"]["status"], "applied_once")
+        self.assertEqual(
+            state["manual_protection"]["manual-1"]["status"],
+            "applied_confirmed",
+        )
+        self.assertNotIn("manual-1", state["pending_manual_protection"])
 
-        # Simulate the user manually changing SL/TP after the bot's first sync.
         pos.sl = 99.0
         pos.tp = 108.0
-        changed_again = sync_manual_trade_protection(
-            cfg, Broker(), state, [pos], equity=100.0, risk=Risk()
-        )
+        changed_again = sync_manual_trade_protection(cfg, Broker(), state, [pos])
         self.assertFalse(changed_again)
         self.assertEqual(len(calls), 1)
+
+    def test_manual_trade_sl_tp_decline_keeps_position_unchanged(self):
+        calls = []
+
+        class Broker:
+            def modify_position(self, deal_id, sl, tp, comment="modify"):
+                calls.append((deal_id, sl, tp, comment))
+                raise AssertionError("declined protection must not touch broker")
+
+        state = {
+            "manual_protection_initialized": True,
+            "bot_deal_ids": {},
+            "manual_protection": {},
+            "pending_manual_protection": {},
+            "recommendations": {
+                "gold": {
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "side": "buy",
+                    "sl": 98.0,
+                    "tp": 106.0,
+                }
+            },
+        }
+        cfg = {
+            "manual_trade_protection": {
+                "enabled": True,
+                "require_confirmation": True,
+                "portfolio_based": False,
+            }
+        }
+        pos = Position(
+            ticket=125,
+            symbol="GOLD",
+            side="buy",
+            lots=0.01,
+            entry=100.0,
+            sl=97.0,
+            tp=109.0,
+            deal_id="manual-keep",
+        )
+
+        self.assertTrue(sync_manual_trade_protection(cfg, Broker(), state, [pos]))
+        resolved = resolve_manual_trade_protection(
+            Broker(), state, "manual-keep", apply=False
+        )
+        self.assertTrue(resolved["ok"])
+        self.assertEqual(resolved["status"], "kept_current")
+        self.assertEqual(calls, [])
+        self.assertEqual(
+            state["manual_protection"]["manual-keep"]["status"],
+            "declined",
+        )
 
     def test_portfolio_based_protection_scales_cash_risk_and_preserves_rr(self):
         market = copy.deepcopy(MARKETS["gold"])
@@ -492,6 +557,31 @@ class RuntimeRegressionTests(unittest.TestCase):
             }
         ]
         self.assertIsNone(pick_winner(rows))
+
+    def test_rsi_handles_one_way_and_flat_markets(self):
+        rising = pd.Series([float(i) for i in range(1, 50)])
+        falling = pd.Series([float(i) for i in range(50, 1, -1)])
+        flat = pd.Series([100.0] * 50)
+        self.assertAlmostEqual(float(rsi(rising, 14).iloc[-1]), 100.0)
+        self.assertAlmostEqual(float(rsi(falling, 14).iloc[-1]), 0.0)
+        self.assertAlmostEqual(float(rsi(flat, 14).iloc[-1]), 50.0)
+
+    def test_supertrend_initializes_from_price_not_forced_short(self):
+        close = pd.Series([100.0 + i * 0.25 for i in range(60)])
+        df = pd.DataFrame(
+            {
+                "open": close - 0.05,
+                "high": close + 0.4,
+                "low": close - 0.4,
+                "close": close,
+            }
+        )
+        st, direction = supertrend(df, 10, 3.0)
+        nonzero = direction[direction != 0]
+        self.assertGreater(len(nonzero), 0)
+        self.assertEqual(float(nonzero.iloc[0]), 1.0)
+        self.assertEqual(float(direction.iloc[-1]), 1.0)
+        self.assertTrue(pd.notna(st.iloc[-1]))
 
 
 if __name__ == "__main__":
