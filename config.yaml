@@ -219,6 +219,7 @@ strategy:
   donchian:
     length: 20
     min_atr_move: 0.15
+    max_atr_move: 1.25
 
   macd_trend:
     fast: 12
@@ -228,6 +229,8 @@ strategy:
   orb:
     minutes: 15
     expire_minutes: 90
+    break_buffer_atr: 0.05
+    max_range_atr: 3.0
 
   sma_cross:
     fast: 9
