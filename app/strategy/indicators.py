@@ -29,7 +29,15 @@ def rsi(close: pd.Series, n: int = 14) -> pd.Series:
     avg_gain = gain.ewm(alpha=1 / n, min_periods=n, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1 / n, min_periods=n, adjust=False).mean()
     rs = avg_gain / avg_loss.replace(0, np.nan)
-    return 100.0 - (100.0 / (1.0 + rs))
+    out = 100.0 - (100.0 / (1.0 + rs))
+
+    # Standard RSI edge cases: a one-way rise is 100, a one-way fall is 0,
+    # and a completely flat window is neutral rather than NaN.
+    both_zero = (avg_gain == 0) & (avg_loss == 0)
+    out = out.mask((avg_gain > 0) & (avg_loss == 0), 100.0)
+    out = out.mask((avg_gain == 0) & (avg_loss > 0), 0.0)
+    out = out.mask(both_zero, 50.0)
+    return out
 
 
 def macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> tuple[pd.Series, pd.Series, pd.Series]:
@@ -148,33 +156,57 @@ def parabolic_sar(df: pd.DataFrame, step: float = 0.02, max_af: float = 0.2) -> 
 def supertrend(df: pd.DataFrame, n: int = 10, m: float = 3.0) -> tuple[pd.Series, pd.Series]:
     hl2 = (df["high"] + df["low"]) / 2.0
     a = atr(df, n)
-    upper = hl2 + m * a
-    lower = hl2 - m * a
-    st = np.zeros(len(df))
-    direction = np.ones(len(df))
+    basic_upper = hl2 + m * a
+    basic_lower = hl2 - m * a
+    final_upper = basic_upper.copy()
+    final_lower = basic_lower.copy()
+    st = pd.Series(np.nan, index=df.index, dtype=float)
+    direction = pd.Series(0.0, index=df.index, dtype=float)
+
+    valid = np.flatnonzero(np.isfinite(a.to_numpy(dtype=float)))
+    if len(valid) == 0:
+        return st, direction
+
+    first = int(valid[0])
     close = df["close"].to_numpy(dtype=float)
-    up = upper.to_numpy(dtype=float)
-    dn = lower.to_numpy(dtype=float)
-    for i in range(1, len(df)):
-        if not np.isfinite(up[i]) or not np.isfinite(dn[i]):
-            st[i] = close[i]
-            direction[i] = direction[i - 1]
+    mid = hl2.to_numpy(dtype=float)
+    initial_up = close[first] >= mid[first]
+    direction.iloc[first] = 1.0 if initial_up else -1.0
+    st.iloc[first] = float(final_lower.iloc[first] if initial_up else final_upper.iloc[first])
+
+    for i in range(first + 1, len(df)):
+        if not finite(float(basic_upper.iloc[i])) or not finite(float(basic_lower.iloc[i])):
+            direction.iloc[i] = direction.iloc[i - 1]
+            st.iloc[i] = st.iloc[i - 1]
             continue
-        if close[i - 1] <= st[i - 1]:
-            st[i] = up[i] if (not np.isfinite(st[i - 1]) or up[i] < st[i - 1]) else st[i - 1]
-            if close[i] > st[i]:
-                direction[i] = 1
-                st[i] = dn[i]
-            else:
-                direction[i] = -1
+
+        prev_upper = float(final_upper.iloc[i - 1])
+        prev_lower = float(final_lower.iloc[i - 1])
+        if float(basic_upper.iloc[i]) < prev_upper or close[i - 1] > prev_upper:
+            final_upper.iloc[i] = basic_upper.iloc[i]
         else:
-            st[i] = dn[i] if (not np.isfinite(st[i - 1]) or dn[i] > st[i - 1]) else st[i - 1]
-            if close[i] < st[i]:
-                direction[i] = -1
-                st[i] = up[i]
+            final_upper.iloc[i] = prev_upper
+        if float(basic_lower.iloc[i]) > prev_lower or close[i - 1] < prev_lower:
+            final_lower.iloc[i] = basic_lower.iloc[i]
+        else:
+            final_lower.iloc[i] = prev_lower
+
+        if direction.iloc[i - 1] > 0:
+            if close[i] < float(final_lower.iloc[i]):
+                direction.iloc[i] = -1.0
+                st.iloc[i] = float(final_upper.iloc[i])
             else:
-                direction[i] = 1
-    return pd.Series(st, index=df.index), pd.Series(direction, index=df.index)
+                direction.iloc[i] = 1.0
+                st.iloc[i] = float(final_lower.iloc[i])
+        else:
+            if close[i] > float(final_upper.iloc[i]):
+                direction.iloc[i] = 1.0
+                st.iloc[i] = float(final_lower.iloc[i])
+            else:
+                direction.iloc[i] = -1.0
+                st.iloc[i] = float(final_upper.iloc[i])
+
+    return st, direction
 
 
 def session_vwap(df: pd.DataFrame) -> pd.Series:
