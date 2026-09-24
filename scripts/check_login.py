@@ -1,20 +1,30 @@
 from pathlib import Path
-import re
+import os
 import sys
 
-env = Path(__file__).resolve().parents[1] / ".env"
-if not env.exists():
-    print("Missing .env — copy .env.example to .env and fill in your Capital.com credentials")
-    sys.exit(1)
+from dotenv import load_dotenv
 
-text = env.read_text(encoding="utf-8", errors="ignore")
+env = Path(__file__).resolve().parents[1] / ".env"
+if env.exists():
+    load_dotenv(env)
+
+identifier = (os.getenv("CAPITAL_EMAIL") or os.getenv("CAPITAL_IDENTIFIER") or "").strip()
+api_key = (os.getenv("CAPITAL_API_KEY") or "").strip()
+password = (os.getenv("CAPITAL_API_PASSWORD") or "").strip()
+
 missing = []
-for key in ("CAPITAL_EMAIL", "CAPITAL_API_KEY", "CAPITAL_API_PASSWORD"):
-    m = re.search(rf"^{key}=(.*)$", text, re.M)
-    if not m or not m.group(1).strip():
-        missing.append(key)
+if not identifier:
+    missing.append("CAPITAL_EMAIL")
+if not api_key:
+    missing.append("CAPITAL_API_KEY")
+if not password:
+    missing.append("CAPITAL_API_PASSWORD")
+
 if missing:
+    if not env.exists():
+        print("Missing .env — copy .env.example to .env and fill in your Capital.com credentials")
     print("Missing:", ", ".join(missing))
     sys.exit(1)
+
 print("Capital.com credentials are filled.")
 print("CAPITAL_ACCOUNT_ID is optional; leave it blank unless you specifically want to switch accounts.")
