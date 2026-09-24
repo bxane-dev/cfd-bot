@@ -25,6 +25,8 @@ def evaluate(df: pd.DataFrame, cfg: dict, market: Market) -> Signal:
     p = (cfg.get("strategy") or {}).get("orb") or {}
     minutes = int(p.get("minutes", 15))
     expire_minutes = int(p.get("expire_minutes", 90))
+    break_buffer_atr = max(0.0, float(p.get("break_buffer_atr", 0.05)))
+    max_range_atr = max(0.0, float(p.get("max_range_atr", 3.0)))
 
     if len(df) < max(market.atr_period, minutes) + 10:
         return empty("not enough bars")
@@ -67,9 +69,12 @@ def evaluate(df: pd.DataFrame, cfg: dict, market: Market) -> Signal:
     width = hi - lo
     if width < 0.4 * a:
         return empty("orb too tight")
+    if max_range_atr > 0 and width > max_range_atr * a:
+        return empty(f"orb too wide {width / a:.1f} ATR")
 
-    if prev <= hi and price > hi:
+    buffer = break_buffer_atr * a
+    if prev <= hi and price > hi + buffer:
         return atr_bracket(price, a, market, cfg, "buy", f"{market.name} ORB{minutes} break high {hi:.{market.digits}f}")
-    if prev >= lo and price < lo:
+    if prev >= lo and price < lo - buffer:
         return atr_bracket(price, a, market, cfg, "sell", f"{market.name} ORB{minutes} break low {lo:.{market.digits}f}")
     return empty("inside opening range")
