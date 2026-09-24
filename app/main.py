@@ -138,6 +138,7 @@ def load_state() -> dict:
     state.setdefault("recommendations", {})
     state.setdefault("bot_deal_ids", {})
     state.setdefault("manual_protection", {})
+    state.setdefault("pending_manual_protection", {})
     return state
 
 
@@ -613,6 +614,102 @@ def portfolio_adjusted_protection(
     }
 
 
+def resolve_manual_trade_protection(
+    broker,
+    state: dict,
+    deal_id: str,
+    *,
+    apply: bool,
+) -> dict:
+    """Resolve a pending manual-position SL/TP proposal.
+
+    No broker modification happens until apply is explicitly true.
+    Declining records the decision so the same position is left untouched and
+    is not repeatedly prompted.
+    """
+    deal_id = str(deal_id or "").strip()
+    pending = state.setdefault("pending_manual_protection", {})
+    protected = state.setdefault("manual_protection", {})
+    proposal = pending.get(deal_id)
+    if not deal_id or not isinstance(proposal, dict):
+        return {"ok": False, "status": "missing", "message": "protection proposal not found"}
+
+    now = datetime.now(timezone.utc).isoformat()
+    if not apply:
+        protected[deal_id] = {
+            **proposal,
+            "status": "declined",
+            "resolved_time": now,
+        }
+        pending.pop(deal_id, None)
+        remember(
+            "manual_protection",
+            f"kept current SL/TP for manual deal {deal_id}",
+            how="user_declined",
+            market=str(proposal.get("market") or ""),
+            extra={"deal_id": deal_id},
+        )
+        return {
+            "ok": True,
+            "status": "kept_current",
+            "message": "Current SL/TP kept unchanged",
+            "deal_id": deal_id,
+        }
+
+    try:
+        sl = float(proposal.get("sl") or 0)
+        tp = float(proposal.get("tp") or 0)
+    except (TypeError, ValueError):
+        return {"ok": False, "status": "invalid", "message": "proposal has invalid SL/TP"}
+    if sl <= 0 or tp <= 0:
+        return {"ok": False, "status": "invalid", "message": "proposal has invalid SL/TP"}
+
+    result = broker.modify_position(
+        deal_id,
+        sl,
+        tp,
+        "bot-recommended-protection-confirmed",
+    )
+    if not result.ok:
+        proposal["last_attempt"] = now
+        proposal["last_error"] = result.message
+        return {
+            "ok": False,
+            "status": "broker_rejected",
+            "message": result.message,
+            "deal_id": deal_id,
+        }
+
+    protected[deal_id] = {
+        **proposal,
+        "status": "applied_confirmed",
+        "resolved_time": now,
+        "broker_message": result.message,
+    }
+    pending.pop(deal_id, None)
+    remember(
+        "manual_protection",
+        f"applied confirmed bot SL/TP to manual deal {deal_id}",
+        how="user_confirmed",
+        market=str(proposal.get("market") or ""),
+        extra={
+            "deal_id": deal_id,
+            "side": proposal.get("side"),
+            "sl": sl,
+            "tp": tp,
+            "portfolio": proposal.get("portfolio") or {},
+        },
+    )
+    return {
+        "ok": True,
+        "status": "applied",
+        "message": result.message,
+        "deal_id": deal_id,
+        "sl": sl,
+        "tp": tp,
+    }
+
+
 def sync_manual_trade_protection(
     cfg: dict,
     broker,
@@ -622,20 +719,23 @@ def sync_manual_trade_protection(
     equity: float | None = None,
     risk: RiskManager | None = None,
 ) -> bool:
-    """Apply the bot's matching SL/TP to each newly seen manual deal exactly once."""
+    """Prepare or apply the bot's matching SL/TP to a newly seen manual deal.
+
+    By default a proposal is queued for explicit dashboard confirmation. Until
+    the user confirms it, the broker position is not modified.
+    """
     pcfg = cfg.get("manual_trade_protection") or {}
     if not bool(pcfg.get("enabled", True)):
         return False
 
     bot_deals = state.setdefault("bot_deal_ids", {})
     protected = state.setdefault("manual_protection", {})
+    pending = state.setdefault("pending_manual_protection", {})
     recommendations = state.setdefault("recommendations", {})
     changed = False
 
     current = {_position_id(p) for p in positions if _position_id(p)}
     if not state.get("manual_protection_initialized"):
-        # Do not rewrite positions that already existed when this feature first
-        # came online; they may already have user-adjusted stops/targets.
         if bool(pcfg.get("ignore_existing_on_first_start", True)):
             now = datetime.now(timezone.utc).isoformat()
             for pos in positions:
@@ -654,10 +754,16 @@ def sync_manual_trade_protection(
 
     max_age = float(pcfg.get("max_recommendation_age_seconds", 300) or 0)
     require_matching_side = bool(pcfg.get("require_matching_side", True))
+    require_confirmation = bool(pcfg.get("require_confirmation", True))
 
     for pos in positions:
         deal_id = _position_id(pos)
-        if not deal_id or deal_id in bot_deals or deal_id in protected:
+        if (
+            not deal_id
+            or deal_id in bot_deals
+            or deal_id in protected
+            or deal_id in pending
+        ):
             continue
 
         market = market_by_symbol(getattr(pos, "symbol", ""))
@@ -694,6 +800,42 @@ def sync_manual_trade_protection(
             sl = float(portfolio_meta["sl"])
             tp = float(portfolio_meta["tp"])
 
+        if require_confirmation:
+            proposal = {
+                "status": "awaiting_confirmation",
+                "time": datetime.now(timezone.utc).isoformat(),
+                "market": market.key,
+                "symbol": getattr(pos, "symbol", ""),
+                "side": pos_side,
+                "sl": sl,
+                "tp": tp,
+                "current_sl": getattr(pos, "sl", None),
+                "current_tp": getattr(pos, "tp", None),
+                "recommendation_time": rec.get("time"),
+                "portfolio": portfolio_meta or {},
+            }
+            pending[deal_id] = proposal
+            print(
+                f"  manual protection {market.name} deal={deal_id}: "
+                f"confirmation required for SL {sl:.{market.digits}f} "
+                f"TP {tp:.{market.digits}f}"
+            )
+            remember(
+                "manual_protection",
+                f"SL/TP confirmation required for manual {market.key} deal {deal_id}",
+                how="pending_confirmation",
+                market=market.key,
+                extra={
+                    "deal_id": deal_id,
+                    "side": pos_side,
+                    "sl": sl,
+                    "tp": tp,
+                    "portfolio": portfolio_meta or {},
+                },
+            )
+            changed = True
+            continue
+
         result = broker.modify_position(deal_id, sl, tp, "bot-recommended-protection")
         print(
             f"  manual protection {market.name} deal={deal_id}: "
@@ -725,11 +867,13 @@ def sync_manual_trade_protection(
             )
             changed = True
 
-    # Keep bot ownership only for deals that can still matter. Protected
-    # records intentionally remain, so a later user SL/TP edit is never reset.
     for deal_id in list(bot_deals):
         if deal_id not in current:
             bot_deals.pop(deal_id, None)
+            changed = True
+    for deal_id in list(pending):
+        if deal_id not in current:
+            pending.pop(deal_id, None)
             changed = True
     return changed
 
