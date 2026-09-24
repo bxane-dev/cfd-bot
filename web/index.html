@@ -766,6 +766,14 @@
       letter-spacing: .04em;
       text-align: right;
     }
+    .signature a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .signature a:hover {
+      color: var(--text);
+      text-decoration: underline;
+    }
     table {
       width: 100%;
       min-width: 720px;
@@ -1034,7 +1042,7 @@
     </section>
   </main>
 
-  <footer class="signature">Built by bxane</footer>
+  <footer class="signature">Built by <a href="https://guns.lol/bxane" target="_blank" rel="noopener noreferrer">bxane</a></footer>
 
   <div class="inspect" id="inspect" onclick="if(event.target.id==='inspect') closeInspect()">
     <div class="inspect-card">
