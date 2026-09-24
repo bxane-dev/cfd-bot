@@ -96,7 +96,7 @@ class Screen:
 
         status = (
             f" {self.mode} · {'RUNNING' if running else 'STOPPED'} · "
-            f"{'Ctrl+C to stop' if running else 'exit ' + str(exit_code if exit_code is not None else '')}"
+            f"{'Ctrl+C to stop · B: open bxane' if running else 'exit ' + str(exit_code if exit_code is not None else '')}"
         )
         footer = status[:width]
 
