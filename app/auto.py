@@ -41,13 +41,23 @@ DEFAULT_STRATS = [
 
 
 def require_login() -> None:
-    env = ROOT / ".env"
-    if not env.exists():
-        raise RuntimeError("Missing .env — copy .env.example to .env and fill in your Capital.com credentials")
-    text = env.read_text(encoding="utf-8", errors="ignore")
-    for key in ("CAPITAL_EMAIL", "CAPITAL_API_KEY", "CAPITAL_API_PASSWORD"):
-        if not any(line.startswith(key + "=") and line.split("=", 1)[1].strip() for line in text.splitlines()):
-            raise RuntimeError(f"{key} empty in .env")
+    identifier = (os.getenv("CAPITAL_EMAIL") or os.getenv("CAPITAL_IDENTIFIER") or "").strip()
+    api_key = (os.getenv("CAPITAL_API_KEY") or "").strip()
+    password = (os.getenv("CAPITAL_API_PASSWORD") or "").strip()
+
+    missing = []
+    if not identifier:
+        missing.append("CAPITAL_EMAIL")
+    if not api_key:
+        missing.append("CAPITAL_API_KEY")
+    if not password:
+        missing.append("CAPITAL_API_PASSWORD")
+    if missing:
+        raise RuntimeError(
+            "Missing Capital.com credentials: "
+            + ", ".join(missing)
+            + ". Fill them in .env (or set them as environment variables)."
+        )
 
 
 def walk_age_hours() -> float | None:
