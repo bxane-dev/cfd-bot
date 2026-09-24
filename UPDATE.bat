@@ -29,6 +29,9 @@ if errorlevel 1 (
   echo GitHub tracking attached to bxane-dev/cfd-bot.
 )
 
+call :ensure_local_excludes
+if errorlevel 1 goto :fail
+
 if "%BOOTSTRAP_ONLY%"=="1" exit /b 0
 
 echo.
@@ -68,6 +71,30 @@ if "!DIRTY!"=="1" (
   echo Your previous local changes are preserved in Git stash.
   echo Run: git stash list
 )
+exit /b 0
+
+:ensure_local_excludes
+rem Older clones may predate .gitignore. Keep machine-local/runtime files out
+rem of "git stash -u" so an active virtualenv is never deleted during update.
+if not exist ".git\info" mkdir ".git\info" >nul 2>&1
+if not exist ".git\info\exclude" type nul > ".git\info\exclude"
+
+call :exclude_local ".env"
+call :exclude_local ".env.*"
+call :exclude_local ".venv/"
+call :exclude_local "venv/"
+call :exclude_local "logs/"
+call :exclude_local ".live_acknowledged"
+call :exclude_local "__pycache__/"
+call :exclude_local "*.py[cod]"
+call :exclude_local ".pytest_cache/"
+call :exclude_local ".coverage"
+call :exclude_local "htmlcov/"
+exit /b 0
+
+:exclude_local
+findstr /x /l /c:"%~1" ".git\info\exclude" >nul 2>&1
+if errorlevel 1 >>".git\info\exclude" echo %~1
 exit /b 0
 
 :lock_origin
