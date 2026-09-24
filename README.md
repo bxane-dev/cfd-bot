@@ -1,6 +1,6 @@
 # CFD Bot
 
-Built by **bxane**
+Built by **bxane** — [guns.lol/bxane](https://guns.lol/bxane)
 
 Capital.com CFD bot + local trading desk for **21 strategy-mapped markets**.
 
