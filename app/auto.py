@@ -43,7 +43,7 @@ DEFAULT_STRATS = [
 def require_login() -> None:
     env = ROOT / ".env"
     if not env.exists():
-        raise RuntimeError("Missing .env — run fill_capital.bat")
+        raise RuntimeError("Missing .env — copy .env.example to .env and fill in your Capital.com credentials")
     text = env.read_text(encoding="utf-8", errors="ignore")
     for key in ("CAPITAL_EMAIL", "CAPITAL_API_KEY", "CAPITAL_API_PASSWORD"):
         if not any(line.startswith(key + "=") and line.split("=", 1)[1].strip() for line in text.splitlines()):
