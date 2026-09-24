@@ -108,6 +108,9 @@ markets:
     live_enabled: true
 manual_trade_protection:
   enabled: true
+  # Never modify a manual position's SL/TP until the dashboard user explicitly
+  # confirms the proposal. Choosing "Keep current" leaves the broker order as-is.
+  require_confirmation: true
   # Adapt the bot's technical SL/TP to current account equity and the actual
   # manual position size. Never widen beyond the strategy's original stop.
   portfolio_based: true
