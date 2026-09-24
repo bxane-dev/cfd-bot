@@ -71,6 +71,9 @@ if "!DIRTY!"=="1" (
   echo Your previous local changes are preserved in Git stash.
   echo Run: git stash list
 )
+echo.
+echo Update finished. Press any key to close this window.
+pause >nul
 exit /b 0
 
 :ensure_local_excludes
@@ -140,4 +143,8 @@ exit /b 0
 :fail
 echo.
 echo GitHub update/setup failed. Your .env and ignored logs were not deleted.
+if "%BOOTSTRAP_ONLY%"=="1" exit /b 1
+echo.
+echo Press any key to close this window.
+pause >nul
 exit /b 1
