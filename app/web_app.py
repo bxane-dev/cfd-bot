@@ -129,6 +129,19 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/reset-day":
             _json(self, 200, desk.reset_daily_loss())
             return
+        if path == "/api/protection":
+            q = parse_qs(urlparse(self.path).query)
+            deal_id = str((q.get("deal_id") or [""])[0]).strip()
+            decision = str((q.get("decision") or [""])[0]).strip().lower()
+            if not deal_id or decision not in {"apply", "keep"}:
+                _json(self, 400, {"error": "deal_id and decision=apply|keep are required"})
+                return
+            _json(
+                self,
+                200,
+                desk.resolve_manual_protection(deal_id, apply=(decision == "apply")),
+            )
+            return
         self.send_error(404)
 
     def _file(self, path: Path, ctype: str) -> None:
