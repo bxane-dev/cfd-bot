@@ -21,6 +21,7 @@ SPACES = {
     },
     "donchian": lambda t: {
         "length": t.suggest_int("length", 10, 30),
+        "min_atr_move": t.suggest_float("min_atr_move", 0.05, 0.35),
         "sl_atr": t.suggest_float("sl_atr", 1.2, 2.4),
         "tp_atr": t.suggest_float("tp_atr", 1.4, 3.0),
     },
@@ -32,6 +33,7 @@ SPACES = {
     "orb": lambda t: {
         "minutes": t.suggest_int("minutes", 10, 25),
         "expire_minutes": t.suggest_int("expire_minutes", 60, 150),
+        "break_buffer_atr": t.suggest_float("break_buffer_atr", 0.0, 0.15),
         "sl_atr": t.suggest_float("sl_atr", 1.2, 2.4),
         "tp_atr": t.suggest_float("tp_atr", 1.4, 3.0),
     },
@@ -45,6 +47,7 @@ SPACES = {
         "period": t.suggest_int("period", 14, 30),
         "k": t.suggest_float("k", 1.5, 2.8),
         "sl_atr": t.suggest_float("sl_atr", 1.2, 2.4),
+        "tp_atr": t.suggest_float("tp_atr", 1.4, 3.0),
     },
     "supertrend": lambda t: {
         "period": t.suggest_int("period", 7, 14),
@@ -56,12 +59,14 @@ SPACES = {
         "oversold": t.suggest_int("oversold", 15, 30),
         "overbought": t.suggest_int("overbought", 70, 85),
         "sl_atr": t.suggest_float("sl_atr", 1.2, 2.4),
+        "tp_atr": t.suggest_float("tp_atr", 1.4, 3.0),
     },
     "vwap": lambda t: {"sl_atr": t.suggest_float("sl_atr", 1.2, 2.4), "tp_atr": t.suggest_float("tp_atr", 1.4, 3.0)},
     "keltner": lambda t: {
         "period": t.suggest_int("period", 14, 30),
         "mult": t.suggest_float("mult", 1.2, 2.2),
         "sl_atr": t.suggest_float("sl_atr", 1.2, 2.4),
+        "tp_atr": t.suggest_float("tp_atr", 1.4, 3.0),
     },
     "sar": lambda t: {
         "step": t.suggest_float("step", 0.01, 0.04),
