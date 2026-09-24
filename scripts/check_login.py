@@ -4,7 +4,7 @@ import sys
 
 env = Path(__file__).resolve().parents[1] / ".env"
 if not env.exists():
-    print("Missing .env — run fill_capital.bat first")
+    print("Missing .env — copy .env.example to .env and fill in your Capital.com credentials")
     sys.exit(1)
 
 text = env.read_text(encoding="utf-8", errors="ignore")
