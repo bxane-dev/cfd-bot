@@ -621,6 +621,36 @@
       border-radius: 11px;
       background: #0c1119;
     }
+    .protection-prompt {
+      margin-top: 10px;
+      padding: 9px;
+      border: 1px solid rgba(245,189,88,.28);
+      border-radius: 9px;
+      background: rgba(245,189,88,.07);
+    }
+    .protection-prompt-title {
+      color: #f5c878;
+      font-size: 10px;
+      font-weight: 760;
+    }
+    .protection-prompt-copy {
+      margin-top: 4px;
+      color: #aeb9c8;
+      font-size: 9px;
+      line-height: 1.35;
+    }
+    .protection-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .protection-actions .btn {
+      width: 100%;
+      min-height: 30px;
+      padding: 6px 8px;
+      font-size: 10px;
+    }
     .position-row {
       display: flex;
       align-items: center;
@@ -1410,6 +1440,25 @@
         const side = String(p.side || '').toLowerCase();
         const pnl = p.unrealized_pnl == null ? null : Number(p.unrealized_pnl);
         const pnlClass = pnl == null ? '' : (pnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+        const proposal = p.protection_proposal && typeof p.protection_proposal === 'object'
+          ? p.protection_proposal
+          : null;
+        const dealEncoded = encodeURIComponent(String(p.deal_id || ''));
+        const proposedSl = proposal ? Number(proposal.sl) : NaN;
+        const proposedTp = proposal ? Number(proposal.tp) : NaN;
+        const protectionHtml = proposal && Number.isFinite(proposedSl) && Number.isFinite(proposedTp) ? `
+          <div class="protection-prompt">
+            <div class="protection-prompt-title">SL/TP confirmation required</div>
+            <div class="protection-prompt-copy">
+              Bot proposes SL <strong>${esc(proposal.sl)}</strong> and TP <strong>${esc(proposal.tp)}</strong>.
+              Nothing changes until you confirm.
+            </div>
+            <div class="protection-actions">
+              <button class="btn btn-primary" onclick="protectionDecision('${dealEncoded}', 'apply', ${proposedSl}, ${proposedTp})">Apply SL/TP</button>
+              <button class="btn" onclick="protectionDecision('${dealEncoded}', 'keep', ${proposedSl}, ${proposedTp})">Keep current</button>
+            </div>
+          </div>
+        ` : '';
         return `
           <div class="position-item">
             <div class="position-row">
@@ -1431,6 +1480,7 @@
               <div><div class="tiny-k">Pricing</div><div class="tiny-v">Live bid/ask</div></div>
               <div></div>
             </div>
+            ${protectionHtml}
           </div>
         `;
       }).join('');
@@ -1735,6 +1785,16 @@
     function scan() { return runAction('scan-btn', '/api/scan'); }
     function start() { return runAction('start-btn', '/api/start'); }
     function stop() { return runAction('stop-btn', '/api/stop'); }
+
+    async function protectionDecision(dealEncoded, decision, sl, tp) {
+      const dealId = decodeURIComponent(String(dealEncoded || ''));
+      if (!dealId) return;
+      if (decision === 'apply') {
+        if (!confirm(`Apply bot-proposed SL ${sl} and TP ${tp}?\n\nThe position is unchanged unless you confirm.`)) return;
+      }
+      const qs = new URLSearchParams({ deal_id: dealId, decision });
+      return runAction('', '/api/protection?' + qs.toString());
+    }
 
     async function resetDay() {
       if (!confirm("Reset today's daily-loss tally? Open positions are not closed.")) return;
