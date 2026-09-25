@@ -1,0 +1,5 @@
+@echo off
+setlocal
+cd /d "%~dp0"
+call BUILD_APP.bat
+exit /b %errorlevel%
