@@ -33,7 +33,11 @@ execution:
     news:
       min_confidence: 0.68
     streamers:
-      majority_threshold: 0.67
+      # DEMO/PAPER execution requires creator agreement in addition to the
+      # normal technical/news/predictor/quality/risk checks.
+      majority_threshold: 0.70
+      require_consensus: true
+      veto_opposite: true
     quality:
       min_reward_risk: 1.00
       max_spread_stop_ratio: 0.25
@@ -333,18 +337,33 @@ auto:
     - inside_bar
 
 streamers:
-  # Public YouTube creator consensus. It can confirm/veto a technical setup,
-  # but it never creates an order by itself.
+  # Public creator consensus from YouTube + Twitch + Kick. It never creates an
+  # order by itself. In LIVE mode it is advisory only; DEMO overrides below
+  # require a >=70% same-direction majority before an entry can continue.
   enabled: true
+  platforms:
+    - youtube
+    - twitch
+    - kick
   refresh_seconds: 60
   max_results: 20
   recent_only: true
   max_age_hours: 12
   min_sources: 3
-  majority_threshold: 0.60
+  majority_threshold: 0.70
   require_consensus: false
-  veto_opposite: true
+  veto_opposite: false
   channels: []
+  twitch:
+    max_results: 25
+    # Extra live-channel searches used in addition to the exact market name.
+    extra_queries:
+      - Stocks
+      - Trading
+  kick:
+    # KICK v2 allows up to 1000 active livestreams per page. Keep this lower
+    # for a faster local scan and filter titles/tags to the current market.
+    directory_limit: 300
 
 quality:
   # Entry-quality filter: aims to skip weak setups rather than increase risk.
