@@ -142,6 +142,7 @@ def main() -> None:
     parser.add_argument("--tune-on-start", action="store_true", help="run tuning on startup when due")
     parser.add_argument("--tune-only", action="store_true")
     parser.add_argument("--no-web", action="store_true", help="do not start the local dashboard")
+    parser.add_argument("--desktop", action="store_true", help="run inside CFD Desk without opening an external browser")
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
 
@@ -215,7 +216,7 @@ def main() -> None:
             lock=run_lock,
         )
         install_shared_desk(desk)
-        start_background(open_browser=True)
+        start_background(open_browser=not args.desktop)
     else:
         print("web dashboard disabled")
 
