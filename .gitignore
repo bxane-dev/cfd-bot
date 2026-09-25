@@ -30,4 +30,5 @@ build/
 release/
 node_modules/
 assets/app-icon.ico
+assets/app-icon-source.jpg
 cfd-engine.spec
