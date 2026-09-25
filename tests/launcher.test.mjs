@@ -104,3 +104,25 @@ test('launchers always restore the canonical BXANE ASCII banner and contain no B
   assert.match(banner, /bxane/i);
   assert.doesNotMatch(banner, /@?BONE/i);
 });
+
+
+test('launchers persist failure diagnostics with exact local path and commit context', () => {
+  assert.match(start, /logs\\START_DEMO\.log/i);
+  assert.match(live, /logs\\START_LIVE\.log/i);
+  for (const launcher of [start, live]) {
+    assert.match(launcher, /Launcher:\s*%~f0/i);
+    assert.match(launcher, /Working directory:\s*%CD%/i);
+    assert.match(launcher, /git rev-parse --short HEAD/i);
+    assert.match(launcher, /FAILURE:\s*%FAIL_REASON%/i);
+    assert.match(launcher, /Last 30 log lines/i);
+    assert.match(launcher, /CFD_START_LOG/i);
+  }
+});
+
+test('updater writes a persistent diagnostic log', () => {
+  assert.match(updater, /logs\\UPDATE\.log/i);
+  assert.match(updater, /git remote -v/i);
+  assert.match(updater, /git status --short --branch/i);
+  assert.match(updater, /git branch -vv/i);
+  assert.match(updater, /Update log:/i);
+});
