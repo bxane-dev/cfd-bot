@@ -19,3 +19,12 @@ test('live trade confirmation modal is wired to the token-protected API', () => 
   assert.match(html, /\/api\/live-order\?/);
   assert.match(html, /decision=approve|decision/);
 });
+
+
+test('SL TP protection modal is wired to explicit dashboard confirmation', () => {
+  assert.match(html, /id="protection-confirm"/);
+  assert.match(html, /Apply SL \/ TP/);
+  assert.match(html, /Keep current/);
+  assert.match(html, /\/api\/protection\?/);
+  assert.doesNotMatch(html, /Apply bot-proposed SL .*confirm\(/);
+});
