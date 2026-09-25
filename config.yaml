@@ -358,6 +358,9 @@ streamers:
   # Only a successful zero-match search may fall back without creator mode.
   # API outages and partial/weak/opposite consensus still block creator-required setups.
   fallback_if_no_matching_creators: true
+  # Require every configured platform lookup to succeed before creator data can
+  # confirm a trade or qualify for the zero-match fallback.
+  require_complete_platform_check: true
   # LIVE and DEMO both require the same-direction creator majority, but LIVE
   # still requires an explicit human confirmation before broker submission.
   require_consensus: true
