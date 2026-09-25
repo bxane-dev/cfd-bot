@@ -110,6 +110,11 @@ markets:
   gbpjpy:
     enabled: true
     live_enabled: true
+live_confirmation:
+  # Pending real-money orders expire quickly so the desk approval cannot submit
+  # a stale setup after the market has moved away from the signal.
+  max_age_seconds: 60
+
 manual_trade_protection:
   enabled: true
   # Never modify a manual position's SL/TP until the dashboard user explicitly
