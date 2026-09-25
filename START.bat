@@ -3,13 +3,35 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 title CFD Bot - Capital.com DEMO
 
+if not exist "logs" mkdir "logs" >nul 2>&1
+set "START_LOG=%CD%\logs\START_DEMO.log"
+> "%START_LOG%" echo ============================================================
+>>"%START_LOG%" echo CFD DEMO launcher log
+>>"%START_LOG%" echo Started: %DATE% %TIME%
+>>"%START_LOG%" echo Launcher: %~f0
+>>"%START_LOG%" echo Working directory: %CD%
+>>"%START_LOG%" echo ============================================================
+where git >nul 2>&1
+if not errorlevel 1 (
+  for /f "delims=" %%G in ('git rev-parse --short HEAD 2^>nul') do >>"%START_LOG%" echo Git commit: %%G
+  for /f "delims=" %%B in ('git branch --show-current 2^>nul') do >>"%START_LOG%" echo Git branch: %%B
+)
+>>"%START_LOG%" echo.
 chcp 65001 >nul 2>&1
 call :ensure_bxane_banner
+>>"%START_LOG%" echo Banner file: %CD%\BXANE.txt
+if exist "BXANE.txt" (
+  >>"%START_LOG%" echo --- BXANE.txt ---
+  type "BXANE.txt" >>"%START_LOG%" 2>&1
+  >>"%START_LOG%" echo --- end BXANE.txt ---
+) else (
+  >>"%START_LOG%" echo ERROR: BXANE.txt missing after ensure_bxane_banner
+)
 call :sticky_banner
 
 if not exist ".git" (
   echo ZIP/non-Git copy detected. Attaching GitHub tracking...
-  call UPDATE.bat --bootstrap-only
+  call UPDATE.bat --bootstrap-only >>"%START_LOG%" 2>&1
   if errorlevel 1 (
     echo Warning: GitHub tracking could not be attached. The bot can still start.
   ) else (
@@ -108,6 +130,9 @@ goto :fail
 
 :python_found
 echo Found Python:
+>>"%START_LOG%" echo Python kind: %PY_KIND%
+>>"%START_LOG%" echo Python executable: %PY_EXE%
+>>"%START_LOG%" echo Python args: %PY_ARGS%
 if "%PY_KIND%"=="launcher" (
   %PY_EXE% %PY_ARGS% --version
 ) else (
@@ -119,8 +144,10 @@ if exist ".venv" rmdir /s /q ".venv"
 
 if "%PY_KIND%"=="launcher" (
   %PY_EXE% %PY_ARGS% -m venv .venv
+  if errorlevel 1 %PY_EXE% %PY_ARGS% -m venv .venv >>"%START_LOG%" 2>&1
 ) else (
   "%PY_EXE%" -m venv .venv
+  if errorlevel 1 "%PY_EXE%" -m venv .venv >>"%START_LOG%" 2>&1
 )
 if errorlevel 1 (
   echo Could not create .venv.
@@ -138,6 +165,7 @@ echo [3/5] Checking dependencies...
 if errorlevel 1 (
   echo pip is missing from the virtual environment. Repairing it...
   "%VENV_PY%" -m ensurepip --upgrade
+  if errorlevel 1 "%VENV_PY%" -m ensurepip --upgrade >>"%START_LOG%" 2>&1
   if errorlevel 1 (
     echo pip repair failed. Rebuilding the virtual environment...
     call :detect_python
@@ -160,8 +188,10 @@ if errorlevel 1 (
 if errorlevel 1 (
   echo Installing dependencies...
   "%VENV_PY%" -m pip install --upgrade pip
+  if errorlevel 1 "%VENV_PY%" -m pip install --upgrade pip >>"%START_LOG%" 2>&1
   if errorlevel 1 goto :fail
   "%VENV_PY%" -m pip install -r requirements.txt
+  if errorlevel 1 "%VENV_PY%" -m pip install -r requirements.txt >>"%START_LOG%" 2>&1
   if errorlevel 1 goto :fail
 )
 
@@ -173,21 +203,28 @@ if not exist ".env" (
 
 "%VENV_PY%" scripts\check_login.py
 if errorlevel 1 (
+  "%VENV_PY%" scripts\check_login.py >>"%START_LOG%" 2>&1
   echo.
   echo Fill CAPITAL_EMAIL, CAPITAL_API_KEY, and CAPITAL_API_PASSWORD in .env.
   start "" notepad ".env"
   pause
   "%VENV_PY%" scripts\check_login.py
-  if errorlevel 1 goto :fail
+  if errorlevel 1 (
+    "%VENV_PY%" scripts\check_login.py >>"%START_LOG%" 2>&1
+    set "FAIL_REASON=Capital.com credential/login check failed"
+    goto :fail
+  )
 )
 
 "%VENV_PY%" -c "import app.auto,app.desk,app.web_app" >nul 2>&1
 if errorlevel 1 (
   echo Startup import check failed.
-  "%VENV_PY%" -c "import app.auto,app.desk,app.web_app"
+  "%VENV_PY%" -c "import app.auto,app.desk,app.web_app" >>"%START_LOG%" 2>&1
+  set "FAIL_REASON=Startup import check failed"
   goto :fail
 )
 
+set "CFD_START_LOG=%START_LOG%"
 echo [5/5] Starting CFD bot in DEMO mode...
 echo Dashboard opens automatically with a one-run control token.
 echo Automatic tuning is skipped at startup so the bot starts immediately.
@@ -199,6 +236,7 @@ set "EXIT_CODE=%errorlevel%"
 if not "%EXIT_CODE%"=="0" (
   echo.
   echo CFD bot stopped with exit code %EXIT_CODE%.
+  set "FAIL_REASON=CFD bot exited with code %EXIT_CODE%"
   goto :fail
 )
 
@@ -306,8 +344,25 @@ if "%BXANE_STICKY%"=="1" if defined ESC (
 exit /b 0
 
 :fail
+if not defined FAIL_REASON set "FAIL_REASON=Launcher/setup step failed; see preceding log entries"
+>>"%START_LOG%" echo.
+>>"%START_LOG%" echo ============================================================
+>>"%START_LOG%" echo FAILURE: %FAIL_REASON%
+>>"%START_LOG%" echo Time: %DATE% %TIME%
+>>"%START_LOG%" echo Launcher: %~f0
+>>"%START_LOG%" echo Working directory: %CD%
+>>"%START_LOG%" echo ============================================================
 echo.
-echo Startup failed. Read the error above.
+echo Startup failed: %FAIL_REASON%
+echo Failure log:
+echo   %START_LOG%
+echo.
+echo Last 30 log lines:
+echo ------------------------------------------------------------
+powershell.exe -NoLogo -NoProfile -Command "if (Test-Path -LiteralPath $env:START_LOG) { Get-Content -LiteralPath $env:START_LOG -Tail 30 }" 2>nul
+echo ------------------------------------------------------------
 call :reset_scroll_region
-pause
+echo.
+echo Press any key to close.
+pause >nul
 exit /b 1
