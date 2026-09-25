@@ -353,9 +353,7 @@ if "%BXANE_ANSI%"=="1" if defined ESC (
   if exist "%~dp0BXANE.txt" (
     type "%~dp0BXANE.txt"
   ) else (
-    echo ============================================================
-    echo ^|                       BY bxane                       ^|
-    echo ============================================================
+    call :print_bxane_ascii
   )
   <nul set /p "=                    %ESC%]8;;https://guns.lol/bxane%ESC%\https://guns.lol/bxane%ESC%]8;;%ESC%\"
   echo.
@@ -368,9 +366,7 @@ rem Fallback for classic CMD hosts that do not expose ANSI capability.
 if exist "%~dp0BXANE.txt" (
   type "%~dp0BXANE.txt"
 ) else (
-  echo ============================================================
-  echo ^|                       BY bxane                       ^|
-  echo ============================================================
+  call :print_bxane_ascii
 )
 echo                     https://guns.lol/bxane
 echo.
