@@ -16,10 +16,12 @@ from main import (
     capital_map,
     enabled_markets,
     ensure_logs,
+    expire_live_order_confirmations,
     load_cfg,
     load_state,
     make_broker,
     resolved_markets,
+    resolve_live_order_confirmation,
     resolve_manual_trade_protection,
     run_once,
     save_state,
@@ -154,6 +156,8 @@ class Desk:
 
     def snapshot(self, force: bool = False) -> dict:
         with self._lock:
+            if expire_live_order_confirmations(self.cfg, self.state):
+                self._snapshot_cache = None
             now = time.monotonic()
             cache_ttl = max(0.0, float(self.cfg.get("snapshot_cache_seconds", 2) or 0))
             if not force and self._snapshot_cache is not None and now - self._snapshot_cache_at < cache_ttl:
@@ -221,6 +225,13 @@ class Desk:
                     }
                 )
             is_running = self.loop_event.is_set() if self.loop_event is not None else self.running
+            pending_live_orders = [
+                dict(item)
+                for item in (self.state.get("pending_live_orders") or {}).values()
+                if isinstance(item, dict)
+            ]
+            pending_live_orders.sort(key=lambda item: str(item.get("created_time") or ""))
+
             payload = {
                 "mode": self.mode,
                 "strategy": (self.cfg.get("strategy") or {}).get("name") or "ema_atr",
@@ -229,6 +240,7 @@ class Desk:
                 "currency": currency,
                 "open_positions": len(positions),
                 "positions": positions,
+                "pending_live_orders": pending_live_orders,
                 "realized": [],
                 "markets": markets,
                 "berlin": datetime.now(BERLIN).strftime("%a %H:%M"),
@@ -309,6 +321,30 @@ class Desk:
             pass
         self.last_error = ""
         return {**self.snapshot(force=True), "risk_reset": snap}
+
+    def resolve_live_order(self, order_id: str, approve: bool) -> dict:
+        with self._lock:
+            result = resolve_live_order_confirmation(
+                self.cfg,
+                self.mode,
+                self.broker,
+                self.risk,
+                self.state,
+                self.markets,
+                self.live_map,
+                order_id,
+                approve=bool(approve),
+            )
+            save_state(self.state)
+            self._snapshot_cache = None
+            status = str(result.get("status") or "")
+            if result.get("ok") or status in {"rejected", "expired", "price_moved"}:
+                self.last_error = ""
+            else:
+                self.last_error = str(result.get("message") or "Live order confirmation failed")
+            payload = self.snapshot(force=True)
+            payload["live_order_result"] = result
+            return payload
 
     def resolve_manual_protection(self, deal_id: str, apply: bool) -> dict:
         with self._lock:
