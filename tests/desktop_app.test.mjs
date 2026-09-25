@@ -7,6 +7,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const main = fs.readFileSync(path.join(root, 'desktop', 'main.js'), 'utf8');
 const backend = fs.readFileSync(path.join(root, 'desktop', 'backend_entry.py'), 'utf8');
 const buildBat = fs.readFileSync(path.join(root, 'BUILD_APP.bat'), 'utf8');
+const buildShortcut = fs.readFileSync(path.join(root, 'build.bat'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 test('desktop app runs the CFD engine hidden in background', () => {
@@ -31,7 +32,17 @@ test('Windows build emits installer and portable app with custom icon', () => {
   assert.ok(targets.includes('portable'));
   assert.equal(pkg.build.win.icon, 'assets/app-icon.ico');
   assert.match(buildBat, /app-icon\.b64/i);
+  assert.match(buildBat, /app-icon-source\.jpg/i);
+  assert.match(buildBat, /pillow/i);
+  assert.match(buildBat, /app-icon\.ico/i);
   assert.match(buildBat, /PyInstaller/i);
   assert.match(buildBat, /--windowed/i);
   assert.match(buildBat, /npm run dist:win/i);
+});
+
+
+test('one-click build.bat delegates to the complete Windows build', () => {
+  assert.match(buildShortcut, /call BUILD_APP\.bat/i);
+  assert.match(buildBat, /--windowed/i);
+  assert.match(buildBat, /windows app icon/i);
 });
