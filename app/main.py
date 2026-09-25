@@ -1208,7 +1208,9 @@ def sync_manual_trade_protection(
 
     max_age = float(pcfg.get("max_recommendation_age_seconds", 300) or 0)
     require_matching_side = bool(pcfg.get("require_matching_side", True))
-    require_confirmation = bool(pcfg.get("require_confirmation", True))
+    # Protection changes are always explicit desk actions. Do not permit a
+    # config toggle to modify broker SL/TP automatically.
+    require_confirmation = True
 
     for pos in positions:
         deal_id = _position_id(pos)
