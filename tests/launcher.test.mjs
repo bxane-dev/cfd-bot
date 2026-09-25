@@ -91,3 +91,16 @@ test('launchers use the persistent console renderer so BXANE cannot scroll away'
   assert.match(sticky, /Child output is piped/);
   assert.match(sticky, /BANNER_PATH/);
 });
+
+
+test('launchers always restore the canonical BXANE ASCII banner and contain no BONE branding', () => {
+  for (const launcher of [start, live]) {
+    assert.match(launcher, /call :ensure_bxane_banner/i);
+    assert.match(launcher, /BXANE_B64=/i);
+    assert.doesNotMatch(launcher, /@?BONE/i);
+  }
+  const banner = fs.readFileSync(path.join(root, 'BXANE.txt'), 'utf8');
+  assert.match(banner, /_______/);
+  assert.match(banner, /bxane/i);
+  assert.doesNotMatch(banner, /@?BONE/i);
+});
