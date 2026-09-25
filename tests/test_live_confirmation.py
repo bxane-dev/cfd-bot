@@ -20,6 +20,7 @@ class LiveOrderConfirmationTests(unittest.TestCase):
                 "require_consensus": True,
                 "veto_opposite": True,
                 "fallback_if_no_matching_creators": True,
+                "require_complete_platform_check": True,
             },
             "broker": {"comment": "test"},
         }
@@ -231,7 +232,7 @@ class LiveOrderConfirmationTests(unittest.TestCase):
             "buy",
         )
         self.assertFalse(ok)
-        self.assertEqual(mode, "lookup_unavailable")
+        self.assertEqual(mode, "lookup_incomplete")
         self.assertIn("unavailable", reason)
 
     def test_live_approval_rechecks_and_allows_zero_match_fallback(self):
