@@ -3,6 +3,10 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 title Build CFD Desk
 
+if exist "BXANE.txt" (
+  type "BXANE.txt"
+  echo.
+)
 echo ============================================================
 echo                    BUILD CFD DESK
 echo ============================================================
@@ -50,12 +54,16 @@ if errorlevel 1 (
 where npm >nul 2>&1
 if errorlevel 1 goto :node_missing
 
-echo [1/5] Preparing application icon...
+echo [1/6] Preparing application icon source...
 if not exist "assets" mkdir "assets"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $b64=(Get-Content -LiteralPath 'assets\app-icon.b64' -Raw).Trim(); [IO.File]::WriteAllBytes((Join-Path (Get-Location) 'assets\app-icon.ico'), [Convert]::FromBase64String($b64))"
+if not exist "assets\app-icon.b64" (
+  echo Missing assets\app-icon.b64.
+  goto :fail
+)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $b64=(Get-Content -LiteralPath 'assets\app-icon.b64' -Raw).Trim(); [IO.File]::WriteAllBytes((Join-Path (Get-Location) 'assets\app-icon-source.jpg'), [Convert]::FromBase64String($b64))"
 if errorlevel 1 goto :fail
 
-echo [2/5] Preparing Python build environment...
+echo [2/6] Preparing Python build environment...
 if not exist ".build-venv\Scripts\python.exe" (
   %PY_CMD% -m venv .build-venv
   if errorlevel 1 goto :fail
@@ -63,10 +71,18 @@ if not exist ".build-venv\Scripts\python.exe" (
 set "BUILD_PY=.build-venv\Scripts\python.exe"
 "%BUILD_PY%" -m pip install --upgrade pip
 if errorlevel 1 goto :fail
-"%BUILD_PY%" -m pip install -r requirements.txt pyinstaller
+"%BUILD_PY%" -m pip install -r requirements.txt pyinstaller pillow
 if errorlevel 1 goto :fail
 
-echo [3/5] Compiling hidden CFD engine...
+echo [3/6] Generating Windows icon...
+"%BUILD_PY%" -c "from PIL import Image; p=r'assets\app-icon-source.jpg'; out=r'assets\app-icon.ico'; img=Image.open(p).convert('RGBA').resize((256,256), Image.Resampling.LANCZOS); img.save(out, format='ICO', sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])"
+if errorlevel 1 goto :fail
+if not exist "assets\app-icon.ico" (
+  echo Icon generation failed.
+  goto :fail
+)
+
+echo [4/6] Compiling hidden CFD engine...
 if exist "build\engine" rmdir /s /q "build\engine"
 if exist "build\pyi-work" rmdir /s /q "build\pyi-work"
 if exist "build\pyi-spec" rmdir /s /q "build\pyi-spec"
@@ -108,11 +124,11 @@ if not exist "build\engine\cfd-engine.exe" (
   goto :fail
 )
 
-echo [4/5] Installing desktop build dependencies...
+echo [5/6] Installing desktop build dependencies...
 call npm install
 if errorlevel 1 goto :fail
 
-echo [5/5] Building Windows app...
+echo [6/6] Building Windows app...
 if exist "release" rmdir /s /q "release"
 call npm run dist:win
 if errorlevel 1 goto :fail
@@ -130,6 +146,7 @@ echo   - a portable single EXE
 echo.
 echo The installed/portable app shows only CFD Desk.
 echo The Python CFD engine is bundled and runs hidden in background.
+echo The supplied CFD artwork is used for the Windows app icon.
 echo.
 start "" explorer "%CD%\release"
 exit /b 0
