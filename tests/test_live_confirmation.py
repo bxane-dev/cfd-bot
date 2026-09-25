@@ -7,14 +7,20 @@ from unittest.mock import patch
 import app  # noqa: F401 - keeps legacy top-level imports available
 
 from instruments import MARKETS
-from main import queue_live_order_confirmation, resolve_live_order_confirmation
+from main import creator_gate_decision, queue_live_order_confirmation, resolve_live_order_confirmation
 
 
 class LiveOrderConfirmationTests(unittest.TestCase):
     def _cfg(self):
         return {
             "live_confirmation": {"max_age_seconds": 60},
-            "streamers": {"majority_threshold": 0.70},
+            "streamers": {
+                "enabled": True,
+                "majority_threshold": 0.70,
+                "require_consensus": True,
+                "veto_opposite": True,
+                "fallback_if_no_matching_creators": True,
+            },
             "broker": {"comment": "test"},
         }
 
@@ -154,6 +160,23 @@ class LiveOrderConfirmationTests(unittest.TestCase):
             patch("main.append_trade"),
             patch("main.remember"),
             patch("main.remember_case"),
+            patch(
+                "main.streamer_signal",
+                return_value={
+                    "side": "buy",
+                    "confidence": 0.75,
+                    "votes": 4,
+                    "buy_votes": 3,
+                    "sell_votes": 1,
+                    "matched_creators": 4,
+                    "lookup_succeeded": True,
+                    "fallback_without_streamers": False,
+                    "platform_counts": {"youtube": 2, "twitch": 1, "kick": 1},
+                    "platform_status": {"youtube": {"ok": True, "found": 2}},
+                    "sources": [],
+                    "reason": "creator majority buy 3/4 (75%)",
+                },
+            ),
         ):
             result = resolve_live_order_confirmation(
                 self._cfg(),
@@ -174,6 +197,117 @@ class LiveOrderConfirmationTests(unittest.TestCase):
         self.assertNotIn(order_id, state["pending_live_orders"])
         self.assertEqual(state["order_guard"][order_id]["status"], "accepted")
         self.assertIn("deal-live-1", state["bot_deal_ids"])
+
+    def test_zero_matching_creators_can_fallback(self):
+        ok, reason, mode = creator_gate_decision(
+            self._cfg(),
+            {
+                "side": "neutral",
+                "confidence": 0.0,
+                "votes": 0,
+                "matched_creators": 0,
+                "lookup_succeeded": True,
+                "fallback_without_streamers": True,
+                "reason": "no matching creators found",
+            },
+            "buy",
+        )
+        self.assertTrue(ok)
+        self.assertEqual(mode, "fallback_no_creators")
+        self.assertIn("search again", reason)
+
+    def test_creator_api_outage_does_not_fallback(self):
+        ok, reason, mode = creator_gate_decision(
+            self._cfg(),
+            {
+                "side": "neutral",
+                "confidence": 0.0,
+                "votes": 0,
+                "matched_creators": 0,
+                "lookup_succeeded": False,
+                "fallback_without_streamers": False,
+                "reason": "creator lookup unavailable on all configured platforms",
+            },
+            "buy",
+        )
+        self.assertFalse(ok)
+        self.assertEqual(mode, "lookup_unavailable")
+        self.assertIn("unavailable", reason)
+
+    def test_live_approval_rechecks_and_allows_zero_match_fallback(self):
+        state = {"order_guard": {}, "pending_live_orders": {}, "diagnostics": {}, "bot_deal_ids": {}}
+        market, order_id = self._queue(state)
+        calls = []
+
+        class Broker:
+            def account(self):
+                return SimpleNamespace(equity=1000.0, currency="CHF", positions=[])
+
+            def quote(self, symbol):
+                return 99.9, 100.1
+
+            def market_order(self, symbol, side, lots, sl, tp, comment):
+                calls.append((symbol, side, lots, sl, tp, comment))
+                return SimpleNamespace(
+                    ok=True,
+                    price=100.0,
+                    message="status=ACCEPTED",
+                    deal_id="deal-fallback-1",
+                )
+
+        class Risk:
+            def check_account(self, *args, **kwargs):
+                return SimpleNamespace(allowed=True, reason="ok")
+
+            def allow_new(self, *args, **kwargs):
+                return SimpleNamespace(allowed=True, reason="ok")
+
+            def spread_ok(self, *args, **kwargs):
+                return SimpleNamespace(allowed=True, reason="spread ok")
+
+            def size_lots(self, *args, **kwargs):
+                return SimpleNamespace(allowed=True, reason="ok", lots=0.01)
+
+            def estimate_margin(self, *args, **kwargs):
+                return 0.0
+
+        fallback = {
+            "side": "neutral",
+            "confidence": 0.0,
+            "votes": 0,
+            "buy_votes": 0,
+            "sell_votes": 0,
+            "matched_creators": 0,
+            "lookup_succeeded": True,
+            "fallback_without_streamers": True,
+            "platform_counts": {},
+            "platform_status": {"youtube": {"ok": True, "found": 0}},
+            "sources": [],
+            "reason": "no matching creators found on available platforms — fallback without creator gate; search will be retried",
+        }
+        with (
+            patch("main.save_state"),
+            patch("main.append_trade"),
+            patch("main.remember"),
+            patch("main.remember_case"),
+            patch("main.streamer_signal", return_value=fallback) as refreshed,
+        ):
+            result = resolve_live_order_confirmation(
+                self._cfg(),
+                "live",
+                Broker(),
+                Risk(),
+                state,
+                [market],
+                {"gold": "GOLD"},
+                order_id,
+                approve=True,
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(len(calls), 1)
+        refreshed.assert_called_once()
+        self.assertTrue(refreshed.call_args.kwargs["force_refresh"])
 
 
 if __name__ == "__main__":
