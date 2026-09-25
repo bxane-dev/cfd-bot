@@ -46,3 +46,12 @@ test('one-click build.bat delegates to the complete Windows build', () => {
   assert.match(buildBat, /--windowed/i);
   assert.match(buildBat, /windows app icon/i);
 });
+
+
+test('builder preserves diagnostics instead of disappearing', () => {
+  assert.match(buildBat, /build\.log/i);
+  assert.match(buildBat, /pause/i);
+  assert.match(buildBat, /if defined CI/i);
+  assert.match(buildShortcut, /build\.log/i);
+  assert.match(buildShortcut, /pause/i);
+});
