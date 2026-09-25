@@ -351,8 +351,10 @@ streamers:
   max_age_hours: 12
   min_sources: 3
   majority_threshold: 0.70
-  require_consensus: false
-  veto_opposite: false
+  # LIVE and DEMO both require the same-direction creator majority, but LIVE
+  # still requires an explicit human confirmation before broker submission.
+  require_consensus: true
+  veto_opposite: true
   channels: []
   twitch:
     max_results: 25
