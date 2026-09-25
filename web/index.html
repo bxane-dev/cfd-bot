@@ -812,6 +812,7 @@
       backdrop-filter: blur(10px);
     }
     .live-confirm.open { display: flex; }
+    .protection-confirm { z-index: 110; }
     .live-confirm-card {
       width: min(520px, 100%);
       overflow: hidden;
@@ -1151,6 +1152,31 @@
 
   <footer class="signature">Built by <a href="https://guns.lol/bxane" target="_blank" rel="noopener noreferrer">bxane</a></footer>
 
+  <div class="live-confirm protection-confirm" id="protection-confirm" role="dialog" aria-modal="true" aria-labelledby="protection-confirm-title">
+    <div class="live-confirm-card">
+      <div class="live-confirm-head">
+        <div class="live-confirm-kicker">SL / TP protection change</div>
+        <h2 class="live-confirm-title" id="protection-confirm-title">Protection approval required</h2>
+        <div class="live-confirm-sub">The broker position is not modified until you explicitly approve.</div>
+      </div>
+      <div class="live-confirm-body">
+        <div class="live-confirm-grid">
+          <div class="live-confirm-cell"><div class="k">Current SL</div><div class="v" id="protection-current-sl">—</div></div>
+          <div class="live-confirm-cell"><div class="k">New SL</div><div class="v" id="protection-new-sl">—</div></div>
+          <div class="live-confirm-cell"><div class="k">Current TP</div><div class="v" id="protection-current-tp">—</div></div>
+          <div class="live-confirm-cell"><div class="k">New TP</div><div class="v" id="protection-new-tp">—</div></div>
+          <div class="live-confirm-cell"><div class="k">Side / size</div><div class="v" id="protection-side-size">—</div></div>
+          <div class="live-confirm-cell"><div class="k">Estimated risk</div><div class="v" id="protection-risk">—</div></div>
+        </div>
+        <div class="live-confirm-warning">No automatic SL/TP modification occurs. Apply changes or keep the current broker protection.</div>
+        <div class="live-confirm-actions">
+          <button class="btn live-confirm-approve" id="protection-apply-btn" onclick="protectionDecision('apply')">Apply SL / TP</button>
+          <button class="btn live-confirm-reject" id="protection-keep-btn" onclick="protectionDecision('keep')">Keep current</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="live-confirm" id="live-confirm" role="dialog" aria-modal="true" aria-labelledby="live-confirm-title">
     <div class="live-confirm-card">
       <div class="live-confirm-head">
@@ -1211,6 +1237,7 @@
       hover: {},
       inspectKey: null,
       liveOrderId: null,
+      protectionDealId: null,
       busy: false,
       statusBusy: false,
       chartsBusy: false,
@@ -1262,7 +1289,7 @@
 
     function setBusy(value) {
       state.busy = value;
-      ['scan-btn','start-btn','stop-btn','reset-btn','live-approve-btn','live-reject-btn'].forEach(id => {
+      ['scan-btn','start-btn','stop-btn','reset-btn','live-approve-btn','live-reject-btn','protection-apply-btn','protection-keep-btn'].forEach(id => {
         const el = $(id);
         if (el) el.disabled = value;
       });
@@ -1606,10 +1633,13 @@
       $('live-risk').textContent = money(order.risk_cash, order.currency || currency);
       $('live-sl').textContent = shortNumber(order.sl, 6);
       $('live-tp').textContent = shortNumber(order.tp, 6);
-      $('live-consensus').textContent =
-        'Creator consensus ' + Math.round(confidence * 100) + '% · ' +
-        buys + ' BUY / ' + sells + ' SELL · ' + votes + ' creators' +
-        (platformText ? ' · ' + platformText : '');
+      $('live-consensus').textContent = crowd.fallback_without_streamers
+        ? 'No matching creators found · FALLBACK WITHOUT STREAMERS · a fresh creator search runs again when you approve'
+        : (
+          'Creator consensus ' + Math.round(confidence * 100) + '% · ' +
+          buys + ' BUY / ' + sells + ' SELL · ' + votes + ' creators' +
+          (platformText ? ' · ' + platformText : '')
+        );
 
       const expires = new Date(order.expires_time || '');
       const ms = expires.getTime() - Date.now();
@@ -1618,6 +1648,34 @@
         ? 'Approval expires if the setup becomes stale. Risk and price are rechecked when you approve.'
         : 'Expires in ' + seconds + 's · risk, spread, position limits and current price are rechecked on approval.';
 
+      modal.classList.add('open');
+    }
+
+    function renderProtectionConfirmation(positions, currency) {
+      const list = Array.isArray(positions) ? positions : [];
+      const pending = list.find(p => p && p.protection_proposal && typeof p.protection_proposal === 'object');
+      const modal = $('protection-confirm');
+      if (!modal) return;
+      if (!pending) {
+        state.protectionDealId = null;
+        modal.classList.remove('open');
+        return;
+      }
+
+      const proposal = pending.protection_proposal || {};
+      const portfolio = proposal.portfolio || {};
+      state.protectionDealId = String(pending.deal_id || '');
+      $('protection-confirm-title').textContent =
+        String(pending.market || pending.symbol || 'Position') + ' · SL / TP';
+      $('protection-current-sl').textContent = shortNumber(proposal.current_sl || pending.sl, 6);
+      $('protection-new-sl').textContent = shortNumber(proposal.sl, 6);
+      $('protection-current-tp').textContent = shortNumber(proposal.current_tp || pending.tp, 6);
+      $('protection-new-tp').textContent = shortNumber(proposal.tp, 6);
+      $('protection-side-size').textContent =
+        String(pending.side || proposal.side || '—').toUpperCase() + ' · ' +
+        shortNumber(pending.lots, 8);
+      const riskCash = portfolio.estimated_risk_cash ?? portfolio.risk_cash;
+      $('protection-risk').textContent = riskCash == null ? '—' : money(riskCash, pending.pnl_currency || currency);
       modal.classList.add('open');
     }
 
@@ -1636,19 +1694,14 @@
         const proposal = p.protection_proposal && typeof p.protection_proposal === 'object'
           ? p.protection_proposal
           : null;
-        const dealEncoded = encodeURIComponent(String(p.deal_id || ''));
         const proposedSl = proposal ? Number(proposal.sl) : NaN;
         const proposedTp = proposal ? Number(proposal.tp) : NaN;
         const protectionHtml = proposal && Number.isFinite(proposedSl) && Number.isFinite(proposedTp) ? `
           <div class="protection-prompt">
-            <div class="protection-prompt-title">SL/TP confirmation required</div>
+            <div class="protection-prompt-title">SL/TP approval pending</div>
             <div class="protection-prompt-copy">
-              Bot proposes SL <strong>${esc(proposal.sl)}</strong> and TP <strong>${esc(proposal.tp)}</strong>.
-              Nothing changes until you confirm.
-            </div>
-            <div class="protection-actions">
-              <button class="btn btn-primary" onclick="protectionDecision('${dealEncoded}', 'apply', ${proposedSl}, ${proposedTp})">Apply SL/TP</button>
-              <button class="btn" onclick="protectionDecision('${dealEncoded}', 'keep', ${proposedSl}, ${proposedTp})">Keep current</button>
+              Proposed SL <strong>${esc(proposal.sl)}</strong> · TP <strong>${esc(proposal.tp)}</strong>.
+              The CFD Desk confirmation popup must be approved before the broker position changes.
             </div>
           </div>
         ` : '';
@@ -1807,6 +1860,7 @@
 
       renderPositions(s.positions || [], s.currency);
       renderMarketWatch(s.markets || []);
+      renderProtectionConfirmation(s.positions || [], s.currency);
       renderLiveOrderConfirmation(s.pending_live_orders || [], s.currency);
 
       // Keep chart headers on the streaming quote even while candle history
@@ -2003,13 +2057,10 @@
       }
     }
 
-    async function protectionDecision(dealEncoded, decision, sl, tp) {
-      const dealId = decodeURIComponent(String(dealEncoded || ''));
-      if (!dealId) return;
-      if (decision === 'apply') {
-        if (!confirm(`Apply bot-proposed SL ${sl} and TP ${tp}?\n\nThe position is unchanged unless you confirm.`)) return;
-      }
-      const qs = new URLSearchParams({ deal_id: dealId, decision });
+    async function protectionDecision(decision) {
+      const dealId = String(state.protectionDealId || '');
+      if (state.busy || !dealId) return;
+      const qs = new URLSearchParams({ deal_id: dealId, decision: String(decision || '') });
       return runAction('', '/api/protection?' + qs.toString());
     }
 
