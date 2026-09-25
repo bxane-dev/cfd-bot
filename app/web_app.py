@@ -129,6 +129,19 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/reset-day":
             _json(self, 200, desk.reset_daily_loss())
             return
+        if path == "/api/live-order":
+            q = parse_qs(urlparse(self.path).query)
+            order_id = str((q.get("order_id") or [""])[0]).strip()
+            decision = str((q.get("decision") or [""])[0]).strip().lower()
+            if not order_id or decision not in {"approve", "reject"}:
+                _json(self, 400, {"error": "order_id and decision=approve|reject are required"})
+                return
+            _json(
+                self,
+                200,
+                desk.resolve_live_order(order_id, approve=(decision == "approve")),
+            )
+            return
         if path == "/api/protection":
             q = parse_qs(urlparse(self.path).query)
             deal_id = str((q.get("deal_id") or [""])[0]).strip()
