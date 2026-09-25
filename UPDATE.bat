@@ -74,6 +74,23 @@ git reset --hard origin/main
 if errorlevel 1 goto :fail
 git branch --set-upstream-to=origin/main main >nul 2>&1
 
+rem Verify the launchers were actually replaced with the current BXANE version.
+git checkout origin/main -- START.bat START_LIVE.bat BXANE.txt >nul 2>&1
+if errorlevel 1 (
+  echo Launcher refresh failed.
+  goto :fail
+)
+findstr /i /c:"@BONE" /c:"BY @BONE" START.bat START_LIVE.bat >nul 2>&1
+if not errorlevel 1 (
+  echo Legacy BONE banner is still present after update.
+  goto :fail
+)
+findstr /i /c:"BY bxane" START.bat START_LIVE.bat >nul 2>&1
+if not errorlevel 1 (
+  echo Compact BY banner is still present after update.
+  goto :fail
+)
+
 echo.
 echo Updated successfully from bxane-dev/cfd-bot.
 git log -1 --oneline
