@@ -454,6 +454,16 @@ def _platform_list(cfg: dict) -> list[str]:
     return out
 
 
+def _unique_creator_count(items: list[dict]) -> int:
+    seen = set()
+    for item in items:
+        platform = str(item.get("platform") or "unknown").strip().lower()
+        channel = str(item.get("channel") or "unknown").strip()
+        identity = _norm_identity(item.get("creator_id") or channel)
+        seen.add(identity or f"{platform}:{channel.lower()}")
+    return len(seen)
+
+
 def consensus_from_items(items: list[dict], cfg: dict) -> dict:
     scfg = cfg.get("streamers") or {}
     allowlist = {
@@ -530,7 +540,7 @@ def consensus_from_items(items: list[dict], cfg: dict) -> dict:
     }
 
 
-def streamer_signal(cfg: dict, market: Market) -> dict:
+def streamer_signal(cfg: dict, market: Market, *, force_refresh: bool = False) -> dict:
     """Cross-platform public creator consensus. This module never sends orders itself."""
     scfg = cfg.get("streamers") or {}
     if not scfg.get("enabled", False):
@@ -544,13 +554,16 @@ def streamer_signal(cfg: dict, market: Market) -> dict:
             "sources": [],
             "platform_counts": {},
             "platform_status": {},
+            "matched_creators": 0,
+            "lookup_succeeded": False,
+            "fallback_without_streamers": False,
             "errors": [],
         }
 
     refresh = max(60.0, float(scfg.get("refresh_seconds", 60) or 60))
     now = time.time()
     cached = _CACHE.get(market.key)
-    if cached and now - float(cached.get("ts", 0.0)) < refresh:
+    if not force_refresh and cached and now - float(cached.get("ts", 0.0)) < refresh:
         return cached["data"]
 
     base = market.search_term or market.name
@@ -613,6 +626,24 @@ def streamer_signal(cfg: dict, market: Market) -> dict:
             status["kick"] = {"ok": False, "error": str(exc)[:140]}
 
     result = consensus_from_items(items, cfg)
+    matched_creators = _unique_creator_count(items)
+    lookup_succeeded = any(bool(row.get("ok")) for row in status.values() if isinstance(row, dict))
+    fallback_enabled = bool(scfg.get("fallback_if_no_matching_creators", True))
+    fallback_without_streamers = bool(
+        fallback_enabled
+        and lookup_succeeded
+        and matched_creators == 0
+    )
+    result["matched_creators"] = matched_creators
+    result["lookup_succeeded"] = lookup_succeeded
+    result["fallback_without_streamers"] = fallback_without_streamers
+    if fallback_without_streamers:
+        result["reason"] = (
+            "no matching creators found on available platforms — "
+            "fallback without creator gate; search will be retried"
+        )
+    elif not lookup_succeeded:
+        result["reason"] = "creator lookup unavailable on all configured platforms"
     result["query"] = query
     result["errors"] = errors
     result["platform_status"] = status
