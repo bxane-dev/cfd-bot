@@ -6,6 +6,7 @@ import copy
 import csv
 import json
 import os
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -324,6 +325,48 @@ def reserve_order(state: dict, key: str, payload: dict) -> bool:
         guard.pop(next(iter(guard)))
     save_state(state)
     return True
+
+
+def confirm_live_order(
+    mode: str,
+    market: Market,
+    side: str,
+    lots: float,
+    sl: float,
+    tp: float,
+    crowd: dict,
+    *,
+    input_fn=input,
+    stdin_is_tty: bool | None = None,
+) -> tuple[bool, str]:
+    """Require explicit per-order human approval before any LIVE broker submission."""
+    if str(mode).lower() != "live":
+        return True, "demo order does not require live confirmation"
+
+    is_tty = sys.stdin.isatty() if stdin_is_tty is None else bool(stdin_is_tty)
+    if not is_tty:
+        return False, "LIVE order blocked: interactive confirmation unavailable"
+
+    confidence = float(crowd.get("confidence") or 0.0)
+    votes = int(crowd.get("votes") or 0)
+    buy_votes = int(crowd.get("buy_votes") or 0)
+    sell_votes = int(crowd.get("sell_votes") or 0)
+    prompt = (
+        f"\nLIVE REAL-MONEY ORDER\n"
+        f"  {market.name}: {side.upper()} {lots}\n"
+        f"  SL={sl:.{market.digits}f} TP={tp:.{market.digits}f}\n"
+        f"  creator consensus={confidence:.0%} "
+        f"({buy_votes} buy / {sell_votes} sell, {votes} creators)\n"
+        f"Type TRADE {market.key.upper()} to submit: "
+    )
+    expected = f"TRADE {market.key.upper()}"
+    try:
+        answer = str(input_fn(prompt) or "").strip().upper()
+    except (EOFError, KeyboardInterrupt):
+        return False, "LIVE order cancelled"
+    if answer != expected:
+        return False, "LIVE order cancelled: confirmation text did not match"
+    return True, "LIVE order explicitly confirmed"
 
 
 def quality_gate(
@@ -1222,6 +1265,36 @@ def run_once(cfg: dict, mode: str, broker, risk: RiskManager, state: dict, marke
             "risk_cash": float(acct.equity) * float(risk_snapshot.get("per_trade") or 0) / 100.0,
             "suggested_lots": float(sized.lots),
         }
+
+        confirmed, confirmation_reason = confirm_live_order(
+            mode,
+            market,
+            sig.side,
+            float(sized.lots),
+            float(sig.sl),
+            float(sig.tp),
+            crowd,
+        )
+        if not confirmed:
+            print(f"  {market.name}: {confirmation_reason}")
+            remember(
+                "skip",
+                confirmation_reason,
+                how="live_confirmation",
+                market=market.key,
+                extra={"streamers": crowd, "mode": mode},
+            )
+            note_decision(
+                state,
+                market,
+                "live_confirmation",
+                confirmation_reason,
+                status="blocked",
+                terminal=True,
+                bar_key=bar_key,
+                extra={"streamers": crowd},
+            )
+            continue
 
         guard_key = order_guard_key(market.key, bar_key, str(configured_strategy), sig.side)
         if not reserve_order(
