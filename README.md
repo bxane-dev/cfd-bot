@@ -52,7 +52,7 @@ python -m app.main --mode live
 
 Current standard profile at **200+ account-currency units**:
 
-- 0.7% target risk per trade
+- 5% target risk per trade
 - 30% portfolio margin cap
 - 12 open positions max
 - 4 positions per market
@@ -61,8 +61,8 @@ Current standard profile at **200+ account-currency units**:
 Small-account bootstrap:
 
 - **40–199.99:** bootstrap mode
-- 2% target risk per trade
-- 4% hard minimum-lot risk cap
+- 5% target risk per trade
+- 5% hard minimum-lot risk cap
 - 80% portfolio margin cap
 - 3 open positions max
 - 2 positions per market
