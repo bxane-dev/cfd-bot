@@ -60,6 +60,17 @@ def _clean(text: str) -> str:
     return ANSI_RE.sub("", str(text or "")).replace("\r", "")
 
 
+def _append_start_log(message: str) -> None:
+    path = str(os.getenv("CFD_START_LOG") or "").strip()
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8", errors="replace") as handle:
+            handle.write(str(message or "") + "\n")
+    except Exception:
+        pass
+
+
 def _visual_lines(lines: deque[str], width: int, limit: int) -> list[str]:
     out: list[str] = []
     safe_width = max(20, width)
@@ -163,6 +174,9 @@ def run(mode: str) -> int:
     if os.name == "nt":
         creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 
+    _append_start_log("CFD child command: " + " ".join(cmd))
+    _append_start_log("CFD child cwd: " + str(ROOT))
+
     proc = subprocess.Popen(
         cmd,
         cwd=ROOT,
@@ -192,6 +206,7 @@ def run(mode: str) -> int:
                 kind, value = events.get(timeout=0.08)
                 if kind == "line":
                     logs.append(value)
+                    _append_start_log(value)
                     dirty = True
             except queue.Empty:
                 pass
@@ -228,10 +243,13 @@ def run(mode: str) -> int:
                         break
                     if kind == "line":
                         logs.append(value)
+                        _append_start_log(value)
+                _append_start_log(f"CFD child exited with code {code}")
                 screen.render(logs, running=False, exit_code=code)
                 return int(code)
 
     except KeyboardInterrupt:
+        _append_start_log("KeyboardInterrupt: stopping CFD bot")
         logs.append("Stopping CFD bot...")
         screen.render(logs, running=True)
         try:
