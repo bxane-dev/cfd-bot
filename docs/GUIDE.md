@@ -35,7 +35,7 @@ Open `config.yaml` and verify:
 ```yaml
 mode: demo
 risk:
-  risk_per_trade_pct: 0.4
+  risk_per_trade_pct: 5.0
   max_portfolio_allocation_pct: 30.0
   daily_loss_enabled: false
   max_daily_loss_pct: 2.0
