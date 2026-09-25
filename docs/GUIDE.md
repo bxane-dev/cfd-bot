@@ -140,10 +140,14 @@ The hardened simulator:
 Only after extended demo validation, explicitly run:
 
 ```bash
-python -m app.main --mode live
+python -m app.auto --mode live --skip-tune
 ```
 
-On Windows, use `START_LIVE.bat`. It shows the active risk settings and requires typing `LIVE` before connecting to the live endpoint.
+On Windows, use `START_LIVE.bat`. The launcher displays the active risk settings and performs the LIVE-account acknowledgement before starting.
+
+A LIVE setup is not submitted immediately. It must first pass the normal strategy, news, predictor, creator-consensus, quality, spread, position, sizing, and margin gates. Creator consensus must be at least 70% in the same direction. The qualified order then appears as a blocking popup in the CFD Desk.
+
+The popup shows the market, direction, size, signal price, SL, TP, estimated cash risk, creator vote split, platform counts, and an expiry countdown. Choose **Approve & send LIVE order** to submit that specific order or **Reject order** to discard it. Approval rechecks current account risk, position limits, spread, sizing, and whether current price is still between the queued SL and TP. Pending approvals expire after 60 seconds by default.
 
 ## 12. Troubleshooting
 
