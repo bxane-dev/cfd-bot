@@ -366,6 +366,46 @@ def expire_live_order_confirmations(cfg: dict, state: dict) -> bool:
     return changed
 
 
+def creator_gate_decision(cfg: dict, crowd: dict, technical_side: str) -> tuple[bool, str, str]:
+    """Apply the creator rule, with fallback only after a successful zero-match search."""
+    scfg = cfg.get("streamers") or {}
+    if not scfg.get("enabled", False):
+        return True, "creator gate disabled", "disabled"
+
+    technical_side = str(technical_side or "").lower()
+    if bool(crowd.get("fallback_without_streamers")):
+        return (
+            True,
+            "no matching creators found — continuing without creator gate; will search again",
+            "fallback_no_creators",
+        )
+
+    if not bool(crowd.get("lookup_succeeded", False)):
+        return False, crowd.get("reason") or "creator lookup unavailable", "lookup_unavailable"
+
+    crowd_side = str(crowd.get("side") or "neutral").lower()
+    if scfg.get("require_consensus", False) and crowd_side not in {"buy", "sell"}:
+        return False, crowd.get("reason") or "creator consensus required", "no_consensus"
+
+    if (
+        crowd_side in {"buy", "sell"}
+        and scfg.get("veto_opposite", True)
+        and crowd_side != technical_side
+    ):
+        why = (
+            f"creator majority {crowd_side} "
+            f"({int(crowd.get('buy_votes') or 0)} buy / "
+            f"{int(crowd.get('sell_votes') or 0)} sell) "
+            f"opposes technical {technical_side}"
+        )
+        return False, why, "opposite"
+
+    if scfg.get("require_consensus", False) and crowd_side != technical_side:
+        return False, crowd.get("reason") or "creator consensus does not confirm the setup", "not_confirmed"
+
+    return True, crowd.get("reason") or "creator gate passed", "confirmed"
+
+
 def queue_live_order_confirmation(
     cfg: dict,
     state: dict,
@@ -441,7 +481,11 @@ def queue_live_order_confirmation(
             "votes": crowd.get("votes"),
             "buy_votes": crowd.get("buy_votes"),
             "sell_votes": crowd.get("sell_votes"),
+            "matched_creators": crowd.get("matched_creators"),
+            "lookup_succeeded": crowd.get("lookup_succeeded"),
+            "fallback_without_streamers": crowd.get("fallback_without_streamers"),
             "platform_counts": crowd.get("platform_counts") or {},
+            "platform_status": crowd.get("platform_status") or {},
             "sources": (crowd.get("sources") or [])[:12],
         },
         "technical_reason": str(technical_reason or ""),
@@ -531,18 +575,55 @@ def resolve_live_order_confirmation(
         return {"ok": False, "status": "expired", "message": why, "order_id": order_id}
 
     side = str(proposal.get("side") or "").lower()
-    crowd = proposal.get("creator_consensus") or {}
-    majority = float((cfg.get("streamers") or {}).get("majority_threshold", 0.70) or 0.70)
-    crowd_side = str(crowd.get("side") or "").lower()
-    confidence = float(crowd.get("confidence") or 0.0)
-    if side not in {"buy", "sell"} or crowd_side != side or confidence + 1e-12 < majority:
-        pending.pop(order_id, None)
-        guard["status"] = "confirmation_invalid"
+    if side not in {"buy", "sell"}:
+        return {"ok": False, "status": "invalid_side", "message": "Pending live order has an invalid side", "order_id": order_id}
+
+    # Always search creators again at the final LIVE approval step. A zero-match
+    # search may use fallback, but an API outage or a weak/opposite consensus does not.
+    refreshed_crowd = streamer_signal(cfg, market, force_refresh=True)
+    proposal["creator_consensus"] = {
+        "side": refreshed_crowd.get("side"),
+        "confidence": refreshed_crowd.get("confidence"),
+        "votes": refreshed_crowd.get("votes"),
+        "buy_votes": refreshed_crowd.get("buy_votes"),
+        "sell_votes": refreshed_crowd.get("sell_votes"),
+        "matched_creators": refreshed_crowd.get("matched_creators"),
+        "lookup_succeeded": refreshed_crowd.get("lookup_succeeded"),
+        "fallback_without_streamers": refreshed_crowd.get("fallback_without_streamers"),
+        "platform_counts": refreshed_crowd.get("platform_counts") or {},
+        "platform_status": refreshed_crowd.get("platform_status") or {},
+        "sources": (refreshed_crowd.get("sources") or [])[:12],
+    }
+    state.setdefault("streamer_consensus", {})[market.key] = refreshed_crowd
+    creator_ok, creator_reason, creator_mode = creator_gate_decision(cfg, refreshed_crowd, side)
+    if not creator_ok:
+        proposal["last_creator_recheck"] = datetime.now(timezone.utc).isoformat()
+        proposal["last_creator_recheck_reason"] = creator_reason
+        guard["status"] = "awaiting_creator_recheck"
         guard["updated"] = datetime.now(timezone.utc).isoformat()
-        why = "Saved creator consensus no longer satisfies the live confirmation rule"
-        note_decision(state, market, "live_confirmation", why, status="blocked", terminal=True, bar_key=str(proposal.get("bar") or ""))
+        note_decision(
+            state,
+            market,
+            "streamers",
+            creator_reason,
+            status="blocked",
+            terminal=False,
+            bar_key=str(proposal.get("bar") or ""),
+            extra={"streamers": refreshed_crowd, "order_id": order_id},
+        )
         save_state(state)
-        return {"ok": False, "status": "invalid_consensus", "message": why, "order_id": order_id}
+        return {
+            "ok": False,
+            "status": "creator_recheck_blocked",
+            "message": creator_reason,
+            "order_id": order_id,
+            "creator_mode": creator_mode,
+        }
+
+    proposal["creator_mode"] = creator_mode
+    proposal["last_creator_recheck"] = datetime.now(timezone.utc).isoformat()
+    proposal["last_creator_recheck_reason"] = creator_reason
+    save_state(state)
 
     acct = broker.account()
     positions = list(acct.positions or [])
@@ -1414,7 +1495,7 @@ def run_once(cfg: dict, mode: str, broker, risk: RiskManager, state: dict, marke
             or "unknown"
         )
 
-        crowd = streamer_signal(trade_cfg, market)
+        crowd = streamer_signal(trade_cfg, market, force_refresh=True)
         state.setdefault("streamer_consensus", {})[market.key] = crowd
         print(f"  {market.name}: {crowd['reason']}")
         remember(
@@ -1432,52 +1513,32 @@ def run_once(cfg: dict, mode: str, broker, risk: RiskManager, state: dict, marke
             },
         )
 
-        scfg = trade_cfg.get("streamers") or {}
-        if scfg.get("enabled", False):
-            crowd_side = str(crowd.get("side") or "neutral")
-            if scfg.get("require_consensus", False) and crowd_side not in ("buy", "sell"):
-                why = crowd.get("reason") or "streamer consensus required"
-                print(f"  {market.name}: {why}")
-                note_decision(
-                    state,
-                    market,
-                    "streamers",
-                    why,
-                    status="blocked",
-                    terminal=False,
-                    bar_key=bar_key,
-                    extra={"streamers": crowd},
-                )
-                continue
-            if (
-                crowd_side in ("buy", "sell")
-                and scfg.get("veto_opposite", True)
-                and crowd_side != sig.side
-            ):
-                why = (
-                    f"streamer majority {crowd_side} "
-                    f"({int(crowd.get('buy_votes') or 0)} buy / "
-                    f"{int(crowd.get('sell_votes') or 0)} sell) "
-                    f"opposes technical {sig.side}"
-                )
-                print(f"  {market.name}: {why}")
-                remember("skip", why, how="streamers", market=market.key, extra=crowd)
-                note_decision(
-                    state,
-                    market,
-                    "streamers",
-                    why,
-                    status="blocked",
-                    terminal=False,
-                    bar_key=bar_key,
-                    extra={"streamers": crowd},
-                )
-                continue
-            if crowd_side == sig.side:
-                print(
-                    f"  {market.name}: STREAMERS CONFIRM {sig.side.upper()} "
-                    f"({int(crowd.get('votes') or 0)} creators)"
-                )
+        creator_ok, creator_reason, creator_mode = creator_gate_decision(
+            trade_cfg,
+            crowd,
+            sig.side,
+        )
+        if not creator_ok:
+            print(f"  {market.name}: {creator_reason}")
+            remember("skip", creator_reason, how="streamers", market=market.key, extra=crowd)
+            note_decision(
+                state,
+                market,
+                "streamers",
+                creator_reason,
+                status="blocked",
+                terminal=False,
+                bar_key=bar_key,
+                extra={"streamers": crowd, "creator_mode": creator_mode},
+            )
+            continue
+        if creator_mode == "fallback_no_creators":
+            print(f"  {market.name}: CREATOR FALLBACK — no matching traders; normal gates continue")
+        elif creator_mode == "confirmed":
+            print(
+                f"  {market.name}: CREATORS CONFIRM {sig.side.upper()} "
+                f"({int(crowd.get('votes') or 0)} creators)"
+            )
 
         quality_ok, quality_reason, quality_extra = quality_gate(
             cfg_use,
