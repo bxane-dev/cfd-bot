@@ -248,5 +248,9 @@ echo ------------------------------------------------------------
 powershell.exe -NoLogo -NoProfile -Command "if (Test-Path -LiteralPath $env:LOG) { Get-Content -LiteralPath $env:LOG -Tail 35 }" 2>nul
 echo ------------------------------------------------------------
 echo.
+if defined CI (
+  echo CI detected - returning failure without waiting for keyboard input.
+  exit /b %BUILD_CODE%
+)
 pause
 exit /b %BUILD_CODE%
