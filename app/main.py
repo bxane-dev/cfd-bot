@@ -380,6 +380,13 @@ def creator_gate_decision(cfg: dict, crowd: dict, technical_side: str) -> tuple[
             "fallback_no_creators",
         )
 
+    require_complete = bool(scfg.get("require_complete_platform_check", True))
+    if require_complete and not bool(crowd.get("lookup_complete", False)):
+        return (
+            False,
+            crowd.get("reason") or "creator lookup incomplete",
+            "lookup_incomplete",
+        )
     if not bool(crowd.get("lookup_succeeded", False)):
         return False, crowd.get("reason") or "creator lookup unavailable", "lookup_unavailable"
 
