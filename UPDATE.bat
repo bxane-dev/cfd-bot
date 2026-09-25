@@ -3,6 +3,16 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 title CFD Bot - GitHub Updater
 
+if not exist "logs" mkdir "logs" >nul 2>&1
+set "UPDATE_LOG=%CD%\logs\UPDATE.log"
+> "%UPDATE_LOG%" echo ============================================================
+>>"%UPDATE_LOG%" echo CFD updater log
+>>"%UPDATE_LOG%" echo Started: %DATE% %TIME%
+>>"%UPDATE_LOG%" echo Updater: %~f0
+>>"%UPDATE_LOG%" echo Working directory: %CD%
+>>"%UPDATE_LOG%" echo ============================================================
+>>"%UPDATE_LOG%" echo.
+
 set "REPO_URL=https://github.com/bxane-dev/cfd-bot.git"
 set "BOOTSTRAP_ONLY=0"
 if /I "%~1"=="--bootstrap-only" set "BOOTSTRAP_ONLY=1"
@@ -67,6 +77,8 @@ git branch --set-upstream-to=origin/main main >nul 2>&1
 echo.
 echo Updated successfully from bxane-dev/cfd-bot.
 git log -1 --oneline
+>>"%UPDATE_LOG%" echo Update completed successfully: %DATE% %TIME%
+git log -1 --oneline >>"%UPDATE_LOG%" 2>&1
 if "!DIRTY!"=="1" (
   echo Your previous local changes are preserved in Git stash.
   echo Run: git stash list
@@ -140,9 +152,27 @@ if errorlevel 1 (
 )
 exit /b 0
 
+:write_diagnostics
+>>"%UPDATE_LOG%" echo.
+>>"%UPDATE_LOG%" echo ============================================================
+>>"%UPDATE_LOG%" echo Diagnostics: %DATE% %TIME%
+>>"%UPDATE_LOG%" echo Updater: %~f0
+>>"%UPDATE_LOG%" echo Working directory: %CD%
+where git >>"%UPDATE_LOG%" 2>&1
+git --version >>"%UPDATE_LOG%" 2>&1
+git remote -v >>"%UPDATE_LOG%" 2>&1
+git status --short --branch >>"%UPDATE_LOG%" 2>&1
+git branch -vv >>"%UPDATE_LOG%" 2>&1
+git log -1 --oneline >>"%UPDATE_LOG%" 2>&1
+>>"%UPDATE_LOG%" echo ============================================================
+exit /b 0
+
 :fail
+call :write_diagnostics
 echo.
 echo GitHub update/setup failed. Your .env and ignored logs were not deleted.
+echo Update log:
+echo   %UPDATE_LOG%
 if "%BOOTSTRAP_ONLY%"=="1" exit /b 1
 echo.
 echo Press any key to close this window.
