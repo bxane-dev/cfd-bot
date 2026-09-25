@@ -11,3 +11,11 @@ test('dashboard inline JavaScript parses', () => {
   assert.ok(scripts.length > 0, 'dashboard script missing');
   for (const script of scripts) new vm.Script(script);
 });
+
+
+test('live trade confirmation modal is wired to the token-protected API', () => {
+  assert.match(html, /id="live-confirm"/);
+  assert.match(html, /Approve &amp; send LIVE order/);
+  assert.match(html, /\/api\/live-order\?/);
+  assert.match(html, /decision=approve|decision/);
+});
