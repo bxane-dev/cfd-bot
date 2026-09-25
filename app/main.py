@@ -23,7 +23,8 @@ from news import news_signal
 from predict import forecast, agree
 from streamers import streamer_signal
 
-ROOT = Path(__file__).resolve().parents[1]
+PACKAGE_ROOT = Path(getattr(__import__("sys"), "_MEIPASS", Path(__file__).resolve().parents[1]))
+ROOT = Path(os.getenv("CFD_DATA_DIR") or PACKAGE_ROOT).resolve()
 LOG_DIR = ROOT / "logs"
 STATE_PATH = LOG_DIR / "state.json"
 TRADES_PATH = LOG_DIR / "trades.csv"
