@@ -6,7 +6,6 @@ import copy
 import csv
 import json
 import os
-import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -140,6 +139,7 @@ def load_state() -> dict:
     state.setdefault("bot_deal_ids", {})
     state.setdefault("manual_protection", {})
     state.setdefault("pending_manual_protection", {})
+    state.setdefault("pending_live_orders", {})
     return state
 
 
@@ -327,46 +327,376 @@ def reserve_order(state: dict, key: str, payload: dict) -> bool:
     return True
 
 
-def confirm_live_order(
-    mode: str,
+def _pending_live_order_for_market(state: dict, market_key: str) -> dict | None:
+    for proposal in (state.get("pending_live_orders") or {}).values():
+        if isinstance(proposal, dict) and str(proposal.get("market") or "") == str(market_key):
+            return proposal
+    return None
+
+
+def _proposal_age_seconds(proposal: dict) -> float | None:
+    raw = proposal.get("created_time")
+    if not raw:
+        return None
+    try:
+        when = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        return max(0.0, (datetime.now(timezone.utc) - when.astimezone(timezone.utc)).total_seconds())
+    except (TypeError, ValueError):
+        return None
+
+
+def expire_live_order_confirmations(cfg: dict, state: dict) -> bool:
+    pending = state.setdefault("pending_live_orders", {})
+    max_age = max(5.0, float((cfg.get("live_confirmation") or {}).get("max_age_seconds", 60) or 60))
+    changed = False
+    for order_id, proposal in list(pending.items()):
+        age = _proposal_age_seconds(proposal if isinstance(proposal, dict) else {})
+        if age is None or age <= max_age:
+            continue
+        guard_key = str((proposal or {}).get("guard_key") or order_id)
+        guard = state.setdefault("order_guard", {}).setdefault(guard_key, {})
+        guard["status"] = "confirmation_expired"
+        guard["updated"] = datetime.now(timezone.utc).isoformat()
+        pending.pop(order_id, None)
+        changed = True
+    if changed:
+        save_state(state)
+    return changed
+
+
+def queue_live_order_confirmation(
+    cfg: dict,
+    state: dict,
     market: Market,
+    symbol: str,
+    strategy_name: str,
+    bar_key: str,
     side: str,
     lots: float,
     sl: float,
     tp: float,
+    signal_price: float,
     crowd: dict,
     *,
-    input_fn=input,
-    stdin_is_tty: bool | None = None,
-) -> tuple[bool, str]:
-    """Require explicit per-order human approval before any LIVE broker submission."""
+    currency: str = "",
+    risk_cash: float = 0.0,
+    technical_reason: str = "",
+    news: dict | None = None,
+    predictor: dict | None = None,
+    setup_memory_id: str | None = None,
+    spread: float | None = None,
+) -> dict:
+    existing = _pending_live_order_for_market(state, market.key)
+    if existing:
+        return {
+            "ok": False,
+            "status": "already_pending",
+            "message": f"LIVE order already awaiting desk approval for {market.name}",
+            "order_id": existing.get("id"),
+        }
+
+    guard_key = order_guard_key(market.key, bar_key, str(strategy_name), side)
+    if not reserve_order(
+        state,
+        guard_key,
+        {
+            "market": market.key,
+            "bar": bar_key,
+            "strategy": str(strategy_name),
+            "side": side,
+            "lots": lots,
+        },
+    ):
+        return {
+            "ok": False,
+            "status": "duplicate",
+            "message": "duplicate order blocked for this strategy/candle/side",
+        }
+
+    now = datetime.now(timezone.utc)
+    max_age = max(5.0, float((cfg.get("live_confirmation") or {}).get("max_age_seconds", 60) or 60))
+    order_id = guard_key
+    proposal = {
+        "id": order_id,
+        "guard_key": guard_key,
+        "created_time": now.isoformat(),
+        "expires_time": (now + timedelta(seconds=max_age)).isoformat(),
+        "market": market.key,
+        "market_name": market.name,
+        "symbol": symbol,
+        "side": side,
+        "lots": float(lots),
+        "sl": float(sl),
+        "tp": float(tp),
+        "signal_price": float(signal_price),
+        "strategy": str(strategy_name),
+        "bar": bar_key,
+        "currency": str(currency or ""),
+        "risk_cash": float(risk_cash or 0.0),
+        "creator_consensus": {
+            "side": crowd.get("side"),
+            "confidence": crowd.get("confidence"),
+            "votes": crowd.get("votes"),
+            "buy_votes": crowd.get("buy_votes"),
+            "sell_votes": crowd.get("sell_votes"),
+            "platform_counts": crowd.get("platform_counts") or {},
+            "sources": (crowd.get("sources") or [])[:12],
+        },
+        "technical_reason": str(technical_reason or ""),
+        "news": news if isinstance(news, dict) else {},
+        "predictor": predictor if isinstance(predictor, dict) else {},
+        "setup_memory_id": setup_memory_id,
+        "spread": spread,
+    }
+    state.setdefault("pending_live_orders", {})[order_id] = proposal
+    save_state(state)
+    return {
+        "ok": True,
+        "status": "pending_confirmation",
+        "message": f"LIVE {side.upper()} awaiting approval in CFD Desk",
+        "order_id": order_id,
+        "proposal": proposal,
+    }
+
+
+def resolve_live_order_confirmation(
+    cfg: dict,
+    mode: str,
+    broker,
+    risk: RiskManager,
+    state: dict,
+    markets: list[Market],
+    live_map: dict[str, str],
+    order_id: str,
+    *,
+    approve: bool,
+) -> dict:
+    """Approve/reject one queued LIVE order. Broker submission only happens here."""
+    order_id = str(order_id or "").strip()
+    pending = state.setdefault("pending_live_orders", {})
+    proposal = pending.get(order_id)
     if str(mode).lower() != "live":
-        return True, "demo order does not require live confirmation"
+        return {"ok": False, "status": "wrong_mode", "message": "Live-order confirmation is only available in LIVE mode"}
+    if not order_id or not isinstance(proposal, dict):
+        return {"ok": False, "status": "missing", "message": "Pending live order not found"}
 
-    is_tty = sys.stdin.isatty() if stdin_is_tty is None else bool(stdin_is_tty)
-    if not is_tty:
-        return False, "LIVE order blocked: interactive confirmation unavailable"
+    guard_key = str(proposal.get("guard_key") or order_id)
+    guard = state.setdefault("order_guard", {}).setdefault(guard_key, {})
+    market_key = str(proposal.get("market") or "")
+    market = next((m for m in markets if m.key == market_key), None)
+    if market is None:
+        pending.pop(order_id, None)
+        guard["status"] = "confirmation_invalid"
+        guard["updated"] = datetime.now(timezone.utc).isoformat()
+        save_state(state)
+        return {"ok": False, "status": "invalid_market", "message": "Pending order market is no longer available"}
 
+    if not approve:
+        pending.pop(order_id, None)
+        guard["status"] = "rejected_by_user"
+        guard["updated"] = datetime.now(timezone.utc).isoformat()
+        why = "LIVE order rejected in CFD Desk"
+        note_decision(
+            state,
+            market,
+            "live_confirmation",
+            why,
+            status="rejected",
+            terminal=True,
+            bar_key=str(proposal.get("bar") or ""),
+        )
+        remember("skip", why, how="live_confirmation", market=market.key, extra={"order_id": order_id})
+        save_state(state)
+        return {"ok": True, "status": "rejected", "message": why, "order_id": order_id}
+
+    max_age = max(5.0, float((cfg.get("live_confirmation") or {}).get("max_age_seconds", 60) or 60))
+    age = _proposal_age_seconds(proposal)
+    if age is None or age > max_age:
+        pending.pop(order_id, None)
+        guard["status"] = "confirmation_expired"
+        guard["updated"] = datetime.now(timezone.utc).isoformat()
+        why = f"LIVE order expired before approval ({age:.0f}s old)" if age is not None else "LIVE order expiry could not be verified"
+        note_decision(
+            state,
+            market,
+            "live_confirmation",
+            why,
+            status="expired",
+            terminal=True,
+            bar_key=str(proposal.get("bar") or ""),
+        )
+        save_state(state)
+        return {"ok": False, "status": "expired", "message": why, "order_id": order_id}
+
+    side = str(proposal.get("side") or "").lower()
+    crowd = proposal.get("creator_consensus") or {}
+    majority = float((cfg.get("streamers") or {}).get("majority_threshold", 0.70) or 0.70)
+    crowd_side = str(crowd.get("side") or "").lower()
     confidence = float(crowd.get("confidence") or 0.0)
-    votes = int(crowd.get("votes") or 0)
-    buy_votes = int(crowd.get("buy_votes") or 0)
-    sell_votes = int(crowd.get("sell_votes") or 0)
-    prompt = (
-        f"\nLIVE REAL-MONEY ORDER\n"
-        f"  {market.name}: {side.upper()} {lots}\n"
-        f"  SL={sl:.{market.digits}f} TP={tp:.{market.digits}f}\n"
-        f"  creator consensus={confidence:.0%} "
-        f"({buy_votes} buy / {sell_votes} sell, {votes} creators)\n"
-        f"Type TRADE {market.key.upper()} to submit: "
+    if side not in {"buy", "sell"} or crowd_side != side or confidence + 1e-12 < majority:
+        pending.pop(order_id, None)
+        guard["status"] = "confirmation_invalid"
+        guard["updated"] = datetime.now(timezone.utc).isoformat()
+        why = "Saved creator consensus no longer satisfies the live confirmation rule"
+        note_decision(state, market, "live_confirmation", why, status="blocked", terminal=True, bar_key=str(proposal.get("bar") or ""))
+        save_state(state)
+        return {"ok": False, "status": "invalid_consensus", "message": why, "order_id": order_id}
+
+    acct = broker.account()
+    positions = list(acct.positions or [])
+    idx_open = open_index_count(broker, markets, positions)
+    account_gate = risk.check_account(acct.equity, len(positions), idx_open)
+    if not account_gate.allowed:
+        return {"ok": False, "status": "risk_blocked", "message": account_gate.reason, "order_id": order_id}
+
+    open_market = 0
+    for pos in positions:
+        found = market_by_symbol(getattr(pos, "symbol", ""))
+        if found and found.key == market.key:
+            open_market += 1
+    position_gate = risk.allow_new(
+        market,
+        idx_open,
+        open_market=open_market,
+        open_positions=len(positions),
+        equity=acct.equity,
     )
-    expected = f"TRADE {market.key.upper()}"
-    try:
-        answer = str(input_fn(prompt) or "").strip().upper()
-    except (EOFError, KeyboardInterrupt):
-        return False, "LIVE order cancelled"
-    if answer != expected:
-        return False, "LIVE order cancelled: confirmation text did not match"
-    return True, "LIVE order explicitly confirmed"
+    if not position_gate.allowed:
+        return {"ok": False, "status": "position_blocked", "message": position_gate.reason, "order_id": order_id}
+
+    symbol = str(proposal.get("symbol") or live_map.get(market.key, market.epic))
+    bid, ask = broker.quote(symbol)
+    spread_gate = risk.spread_ok(float(bid), float(ask), market)
+    if not spread_gate.allowed:
+        return {"ok": False, "status": "spread_blocked", "message": spread_gate.reason, "order_id": order_id}
+    current_price = (float(bid) + float(ask)) / 2.0
+
+    sl = float(proposal.get("sl") or 0.0)
+    tp = float(proposal.get("tp") or 0.0)
+    valid_geometry = (
+        (side == "buy" and sl < current_price < tp)
+        or (side == "sell" and tp < current_price < sl)
+    )
+    if not valid_geometry:
+        pending.pop(order_id, None)
+        guard["status"] = "confirmation_price_moved"
+        guard["updated"] = datetime.now(timezone.utc).isoformat()
+        why = "Price moved beyond the queued SL/TP geometry; setup cancelled"
+        note_decision(state, market, "live_confirmation", why, status="expired", terminal=True, bar_key=str(proposal.get("bar") or ""))
+        save_state(state)
+        return {"ok": False, "status": "price_moved", "message": why, "order_id": order_id}
+
+    open_margin = gross_open_margin(positions, risk)
+    resized = risk.size_lots(
+        float(acct.equity),
+        abs(current_price - sl),
+        market,
+        price=current_price,
+        allocated_margin=open_margin,
+    )
+    if not resized.allowed:
+        return {"ok": False, "status": "sizing_blocked", "message": resized.reason, "order_id": order_id}
+    lots = min(float(proposal.get("lots") or 0.0), float(resized.lots or 0.0))
+    if lots < float(market.min_lot):
+        return {"ok": False, "status": "sizing_blocked", "message": "Approved size is now below broker minimum", "order_id": order_id}
+
+    fill = broker.market_order(
+        symbol,
+        side,
+        lots,
+        sl,
+        tp,
+        cfg["broker"]["comment"],
+    )
+    pending.pop(order_id, None)
+    guard["status"] = "accepted" if fill.ok else "rejected_or_unknown"
+    guard["message"] = fill.message
+    guard["updated"] = datetime.now(timezone.utc).isoformat()
+
+    append_trade(
+        [
+            datetime.now(timezone.utc).isoformat(),
+            mode,
+            market.key,
+            symbol,
+            side,
+            lots,
+            fill.price,
+            sl,
+            tp,
+            fill.ok,
+            fill.message,
+        ]
+    )
+    remember(
+        "trade",
+        f"{side} {lots} {market.key} @ {fill.price} sl={sl} tp={tp}",
+        how="dashboard_live_confirmation",
+        market=market.key,
+        extra={"ok": fill.ok, "message": fill.message, "mode": mode, "symbol": symbol, "order_id": order_id},
+    )
+    remember_case(
+        event="order",
+        market=market.key,
+        strategy=str(proposal.get("strategy") or "unknown"),
+        side=side,
+        technical_reason=str(proposal.get("technical_reason") or ""),
+        news=proposal.get("news") if isinstance(proposal.get("news"), dict) else {},
+        predictor=proposal.get("predictor") if isinstance(proposal.get("predictor"), dict) else {},
+        price=fill.price or current_price,
+        spread=(float(ask) - float(bid)),
+        parent_id=proposal.get("setup_memory_id"),
+        extra={
+            "mode": mode,
+            "lots": lots,
+            "sl": sl,
+            "tp": tp,
+            "accepted": bool(fill.ok),
+            "broker_message": fill.message,
+            "confirmed_in_desk": True,
+        },
+    )
+    note_decision(
+        state,
+        market,
+        "order",
+        fill.message or ("accepted" if fill.ok else "broker rejected or confirmation unknown"),
+        status="trade" if fill.ok else "order_failed",
+        terminal=True,
+        bar_key=str(proposal.get("bar") or ""),
+        extra={
+            "side": side,
+            "lots": lots,
+            "price": fill.price or current_price,
+            "strategy": str(proposal.get("strategy") or "unknown"),
+            "confirmed_in_desk": True,
+        },
+    )
+
+    if fill.ok:
+        bot_deal_id = str(getattr(fill, "deal_id", "") or "")
+        if bot_deal_id:
+            state.setdefault("bot_deal_ids", {})[bot_deal_id] = {
+                "time": datetime.now(timezone.utc).isoformat(),
+                "market": market.key,
+                "side": side,
+            }
+
+    save_state(state)
+    return {
+        "ok": bool(fill.ok),
+        "status": "accepted" if fill.ok else "rejected_or_unknown",
+        "message": fill.message,
+        "order_id": order_id,
+        "market": market.key,
+        "side": side,
+        "lots": lots,
+        "price": fill.price,
+        "sl": sl,
+        "tp": tp,
+    }
 
 
 def quality_gate(
@@ -923,6 +1253,7 @@ def sync_manual_trade_protection(
 
 def run_once(cfg: dict, mode: str, broker, risk: RiskManager, state: dict, markets: list[Market], live_map: dict[str, str]) -> None:
     trade_cfg = effective_trade_cfg(cfg, mode)
+    expire_live_order_confirmations(cfg, state)
     acct = broker.account()
     positions = list(acct.positions or [])
     idx_open = open_index_count(broker, markets, positions)
@@ -955,6 +1286,19 @@ def run_once(cfg: dict, mode: str, broker, risk: RiskManager, state: dict, marke
 
     for market in markets:
         symbol = live_map.get(market.key, market.epic)
+        if str(mode).lower() == "live":
+            pending_order = _pending_live_order_for_market(state, market.key)
+            if pending_order:
+                why = "pending live order awaiting confirmation in CFD Desk"
+                note_decision(
+                    state,
+                    market,
+                    "live_confirmation",
+                    why,
+                    status="pending_confirmation",
+                    terminal=False,
+                )
+                continue
         open_ok, session_msg = in_session(market)
         if not open_ok:
             print(f"  {market.name}: {session_msg}")
@@ -1266,37 +1610,62 @@ def run_once(cfg: dict, mode: str, broker, risk: RiskManager, state: dict, marke
             "suggested_lots": float(sized.lots),
         }
 
-        confirmed, confirmation_reason = confirm_live_order(
-            mode,
-            market,
-            sig.side,
-            float(sized.lots),
-            float(sig.sl),
-            float(sig.tp),
-            crowd,
-        )
-        if not confirmed:
-            print(f"  {market.name}: {confirmation_reason}")
-            remember(
-                "skip",
-                confirmation_reason,
-                how="live_confirmation",
-                market=market.key,
-                extra={"streamers": crowd, "mode": mode},
-            )
-            note_decision(
+        guard_key = order_guard_key(market.key, bar_key, str(configured_strategy), sig.side)
+        if str(mode).lower() == "live":
+            queued = queue_live_order_confirmation(
+                cfg,
                 state,
                 market,
-                "live_confirmation",
-                confirmation_reason,
-                status="blocked",
-                terminal=True,
-                bar_key=bar_key,
-                extra={"streamers": crowd},
+                symbol,
+                str(configured_strategy),
+                bar_key,
+                sig.side,
+                float(sized.lots),
+                float(sig.sl),
+                float(sig.tp),
+                last,
+                crowd,
+                currency=str(acct.currency or ""),
+                risk_cash=float(risk_snapshot.get("per_trade") or 0) * float(acct.equity) / 100.0,
+                technical_reason=sig.reason,
+                news=memory_news,
+                predictor=pred if isinstance(pred, dict) else {},
+                setup_memory_id=setup_memory.get("id"),
+                spread=(ask - bid),
             )
+            why = str(queued.get("message") or "LIVE order awaiting approval in CFD Desk")
+            print(f"  {market.name}: {why}")
+            if queued.get("ok"):
+                remember(
+                    "live_confirmation",
+                    why,
+                    how="dashboard_pending",
+                    market=market.key,
+                    extra={"order_id": queued.get("order_id"), "streamers": crowd},
+                )
+                note_decision(
+                    state,
+                    market,
+                    "live_confirmation",
+                    why,
+                    status="pending_confirmation",
+                    terminal=True,
+                    bar_key=bar_key,
+                    extra={"streamers": crowd, "order_id": queued.get("order_id")},
+                )
+            else:
+                note_decision(
+                    state,
+                    market,
+                    "live_confirmation",
+                    why,
+                    status="blocked",
+                    terminal=True,
+                    bar_key=bar_key,
+                )
+            save_state(state)
             continue
 
-        guard_key = order_guard_key(market.key, bar_key, str(configured_strategy), sig.side)
         if not reserve_order(
             state,
             guard_key,
