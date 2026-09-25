@@ -16,8 +16,9 @@ from urllib.parse import parse_qs, urlparse
 
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parents[1]
-WEB = ROOT / "web"
+PACKAGE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+ROOT = Path(os.getenv("CFD_DATA_DIR") or PACKAGE_ROOT).resolve()
+WEB = PACKAGE_ROOT / "web"
 load_dotenv(ROOT / ".env")
 HOST = os.getenv("CFD_WEB_HOST", "127.0.0.1").strip() or "127.0.0.1"
 PORT = 8484
