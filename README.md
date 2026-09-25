@@ -12,7 +12,8 @@ Capital.com CFD bot + local trading desk for **21 strategy-mapped markets**.
 - 21 markets with a dedicated strategy per market.
 - Equity/portfolio-based position sizing and SL/TP.
 - One-time SL/TP sync for new manual trades using the bot recommendation.
-- Spread, news, predictor, quality, margin, position, and duplicate-order gates.
+- Spread, news, predictor, creator-consensus, quality, margin, position, and duplicate-order gates.
+- Cross-platform creator consensus from YouTube, Twitch, and Kick; DEMO entries require a >=70% same-direction majority when at least 3 directional creators are found.
 - Fast local desk with Capital.com **WebSocket price streaming** and REST fallback.
 - Local trading memory, trade/equity logs, walk-forward analysis, and tuning.
 
@@ -34,6 +35,17 @@ CAPITAL_ACCOUNT_ID=
 ```
 
 `CAPITAL_ACCOUNT_ID` is optional.
+
+For Twitch/Kick creator discovery, create developer apps on those platforms and add:
+
+```text
+TWITCH_CLIENT_ID=
+TWITCH_CLIENT_SECRET=
+KICK_CLIENT_ID=
+KICK_CLIENT_SECRET=
+```
+
+YouTube needs no API key in this build. Missing Twitch/Kick credentials are treated as unavailable sources, not as votes.
 
 ### Terminal
 
@@ -103,6 +115,8 @@ Times are **Europe/Zurich / Swiss time**. These are the main high-activity windo
 **Main overall activity window:** roughly **14:00–18:00 Swiss time**.
 
 Every order still has to pass the bot's strategy and risk filters.
+
+In DEMO mode, creator consensus is an additional entry gate: the technical direction must match a >=70% majority across the directional creators found from YouTube/Twitch/Kick. LIVE mode records the same consensus for review but does not use social sentiment as an automatic live-money trigger.
 
 ## Desk
 
