@@ -11,9 +11,9 @@ Capital.com CFD bot + local trading desk for **21 strategy-mapped markets**.
 - Capital.com **demo + live** trading.
 - 21 markets with a dedicated strategy per market.
 - Equity/portfolio-based position sizing and SL/TP.
-- One-time SL/TP sync for new manual trades using the bot recommendation.
+- One-time SL/TP sync for new manual trades using the bot recommendation, always behind an explicit CFD Desk confirmation popup.
 - Spread, news, predictor, creator-consensus, quality, margin, position, and duplicate-order gates.
-- Cross-platform creator consensus from YouTube, Twitch, and Kick; DEMO and LIVE entries require a >=70% same-direction majority when at least 3 directional creators are found.
+- Cross-platform creator consensus from YouTube, Twitch, and Kick; DEMO and LIVE entries require a >=70% same-direction majority when at least 3 directional creators are found. If all configured platforms are checked successfully and zero relevant creators exist, the bot falls back to the normal non-streamer gates and searches again on the next eligible setup.
 - Fast local desk with Capital.com **WebSocket price streaming** and REST fallback.
 - Local trading memory, trade/equity logs, walk-forward analysis, and tuning.
 
@@ -116,7 +116,7 @@ Times are **Europe/Zurich / Swiss time**. These are the main high-activity windo
 
 Every order still has to pass the bot's strategy and risk filters.
 
-Creator consensus is an additional entry gate in both DEMO and LIVE: the technical direction must match a >=70% majority across the directional creators found from YouTube/Twitch/Kick. DEMO can continue automatically after the remaining gates pass. LIVE queues the qualified order in the CFD Desk and requires an explicit **Approve & send LIVE order** click before anything is submitted to Capital.com. Pending live approvals expire after 60 seconds by default, and risk, spread, position limits, sizing, and current SL/TP geometry are rechecked when you approve.
+Creator consensus is an additional entry gate in both DEMO and LIVE: the technical direction must match a >=70% majority across the directional creators found from YouTube/Twitch/Kick. Each eligible setup forces a fresh creator search. If every configured platform check succeeds but no relevant creator is found, the bot falls back to the normal non-streamer gates for that setup and checks creators again on the next eligible scan. Partial platform/API failures do not qualify for fallback. LIVE queues the qualified order in the CFD Desk and requires an explicit **Approve & send LIVE order** click before anything is submitted to Capital.com. Approval performs another fresh creator search plus current risk, spread, position-limit, sizing, and SL/TP-geometry checks.
 
 ## Desk
 
@@ -127,6 +127,7 @@ Creator consensus is an additional entry gate in both DEMO and LIVE: the technic
 - Charts refresh: **10 s**.
 - Shows the exact no-trade reason per market.
 - Shows a blocking LIVE-order approval popup with market, side, size, signal price, SL, TP, estimated risk, creator consensus, platform vote counts, and expiry countdown.
+- Shows a separate blocking SL/TP protection popup. Broker SL/TP changes are never applied automatically; choose **Apply SL / TP** or **Keep current**.
 - Dashboard is localhost-only by default.
 
 To expose it to your trusted LAN:
