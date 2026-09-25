@@ -22,7 +22,7 @@ test("live feeds use short bounded refresh intervals", () => {
 
 test("all 21 strategy markets are enabled for demo and live scanning", () => {
   assert.match(config, /demo_market_scope:\s*all\b/);
-  assert.match(config, /risk:\s*[\s\S]*?risk_per_trade_pct:\s*0\.7\b/);
+  assert.match(config, /risk:\s*[\s\S]*?risk_per_trade_pct:\s*5\.0\b/);
   const enabled = [...config.matchAll(/live_enabled:\s*true\b/g)];
   assert.equal(enabled.length, 21);
   assert.doesNotMatch(config, /live_enabled:\s*false\b/);
