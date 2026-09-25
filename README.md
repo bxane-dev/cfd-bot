@@ -60,6 +60,27 @@ Live:
 python -m app.main --mode live
 ```
 
+
+## Desktop app build
+
+CFD Desk can be built as a single Windows desktop application. The Electron window is the only visible app; the bundled Python CFD engine starts automatically and runs hidden in the background.
+
+On Windows, double-click:
+
+```text
+build.bat
+```
+
+The build script automatically:
+
+- prepares Python and Node.js build dependencies;
+- regenerates the Windows `.ico` from the supplied CFD artwork stored in `assets/app-icon.b64`;
+- packages the Python trading engine with PyInstaller using `--windowed` so no engine console appears;
+- bundles the hidden engine into CFD Desk;
+- creates an installer and portable Windows EXE under `release/`.
+
+The desktop app stores its writable `.env`, `config.yaml`, logs, and state in its Windows application-data folder so the installed program files remain read-only.
+
 ## Risk
 
 Current standard profile at **200+ account-currency units**:
