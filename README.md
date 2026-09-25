@@ -13,7 +13,7 @@ Capital.com CFD bot + local trading desk for **21 strategy-mapped markets**.
 - Equity/portfolio-based position sizing and SL/TP.
 - One-time SL/TP sync for new manual trades using the bot recommendation.
 - Spread, news, predictor, creator-consensus, quality, margin, position, and duplicate-order gates.
-- Cross-platform creator consensus from YouTube, Twitch, and Kick; DEMO entries require a >=70% same-direction majority when at least 3 directional creators are found.
+- Cross-platform creator consensus from YouTube, Twitch, and Kick; DEMO and LIVE entries require a >=70% same-direction majority when at least 3 directional creators are found.
 - Fast local desk with Capital.com **WebSocket price streaming** and REST fallback.
 - Local trading memory, trade/equity logs, walk-forward analysis, and tuning.
 
@@ -116,7 +116,7 @@ Times are **Europe/Zurich / Swiss time**. These are the main high-activity windo
 
 Every order still has to pass the bot's strategy and risk filters.
 
-In DEMO mode, creator consensus is an additional entry gate: the technical direction must match a >=70% majority across the directional creators found from YouTube/Twitch/Kick. LIVE mode records the same consensus for review but does not use social sentiment as an automatic live-money trigger.
+Creator consensus is an additional entry gate in both DEMO and LIVE: the technical direction must match a >=70% majority across the directional creators found from YouTube/Twitch/Kick. DEMO can continue automatically after the remaining gates pass. LIVE queues the qualified order in the CFD Desk and requires an explicit **Approve & send LIVE order** click before anything is submitted to Capital.com. Pending live approvals expire after 60 seconds by default, and risk, spread, position limits, sizing, and current SL/TP geometry are rechecked when you approve.
 
 ## Desk
 
@@ -126,6 +126,7 @@ In DEMO mode, creator consensus is an additional entry gate: the technical direc
 - Trades/activity refresh: **5 s**.
 - Charts refresh: **10 s**.
 - Shows the exact no-trade reason per market.
+- Shows a blocking LIVE-order approval popup with market, side, size, signal price, SL, TP, estimated risk, creator consensus, platform vote counts, and expiry countdown.
 - Dashboard is localhost-only by default.
 
 To expose it to your trusted LAN:
