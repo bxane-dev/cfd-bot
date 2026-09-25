@@ -18,18 +18,7 @@ if not errorlevel 1 (
 )
 >>"%START_LOG%" echo.
 chcp 65001 >nul 2>&1
-call :ensure_bxane_banner
-if errorlevel 1 goto :fail
->>"%START_LOG%" echo Banner file: %CD%\BXANE.txt
-if exist "BXANE.txt" (
-  >>"%START_LOG%" echo --- BXANE.txt ---
-  type "BXANE.txt" >>"%START_LOG%" 2>&1
-  >>"%START_LOG%" echo --- end BXANE.txt ---
-) else (
-  >>"%START_LOG%" echo ERROR: BXANE.txt missing after ensure_bxane_banner
-)
-call :sticky_banner
-
+call :show_bxane_ascii
 if not exist ".git" (
   echo ZIP/non-Git copy detected. Attaching GitHub tracking...
   call UPDATE.bat --bootstrap-only >>"%START_LOG%" 2>&1
@@ -325,50 +314,14 @@ for %%V in (314 313 312 311) do (
 
 exit /b 1
 
-:ensure_bxane_banner
-set "BXANE_B64=IF9fX19fXyAgICAgICAgICAgIF9fX19fX18gIF8gICAgICAgIF9fX19fX18KKCAgX19fIFwgfFwgICAgIC98KCAgX19fICApKCAoICAgIC98KCAgX19fXyBcCnwgKCAgICkgKSggXCAgIC8gKXwgKCAgICkgfHwgIFwgICggfHwgKCAgICBcLwp8IChfXy8gLyAgXCAoXykgLyB8IChfX18pIHx8ICAgXCB8IHx8IChfXwp8ICBfXyAoICAgICkgXyAoICB8ICBfX18gIHx8IChcIFwpIHx8ICBfXykKfCAoICBcIFwgIC8gKCApIFwgfCAoICAgKSB8fCB8IFwgICB8fCAoCnwgKV9fXykgKSggLyAgIFwgKXwgKSAgICggfHwgKSAgXCAgfHwgKF9fX18vXAp8LyBcX19fLyB8LyAgICAgXHx8LyAgICAgXHx8LyAgICApXykoX19fX19fXy8KICAgICAgICAgICAgICAgICAgICAgICAgIGJ4YW5lCg=="
-set "BXANE_BANNER_PATH=%~dp0BXANE.txt"
-powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; [IO.File]::WriteAllBytes($env:BXANE_BANNER_PATH,[Convert]::FromBase64String($env:BXANE_B64))" >>"%START_LOG%" 2>&1
-if errorlevel 1 (
-  set "FAIL_REASON=Could not restore BXANE banner"
-  exit /b 1
-)
-exit /b 0
-
-
-:sticky_banner
-set "BXANE_STICKY=0"
-set "ESC="
-for /F "delims=" %%E in ('echo prompt $E^| cmd') do set "ESC=%%E"
-
-rem Keep BXANE fixed in rows 1-11. Only the log area from row 12 down scrolls.
-set "BXANE_ANSI=0"
-if defined WT_SESSION set "BXANE_ANSI=1"
-if defined ANSICON set "BXANE_ANSI=1"
-if /I "%ConEmuANSI%"=="ON" set "BXANE_ANSI=1"
-if defined TERM set "BXANE_ANSI=1"
-
-if "%BXANE_ANSI%"=="1" if defined ESC (
-  <nul set /p "=%ESC%[2J%ESC%[H"
-  if exist "%~dp0BXANE.txt" (
-    type "%~dp0BXANE.txt"
-  ) else (
-    call :print_bxane_ascii
-  )
-  <nul set /p "=                    %ESC%]8;;https://guns.lol/bxane%ESC%\https://guns.lol/bxane%ESC%]8;;%ESC%\"
-  echo.
-  <nul set /p "=%ESC%[12;r%ESC%[12;1H"
-  set "BXANE_STICKY=1"
-  exit /b 0
-)
-
-rem Fallback for classic CMD hosts that do not expose ANSI capability.
-if exist "%~dp0BXANE.txt" (
-  type "%~dp0BXANE.txt"
-) else (
-  call :print_bxane_ascii
-)
-echo                     https://guns.lol/bxane
+:show_bxane_ascii
+echo  ______            _______  _        _______
+echo (  ___  ^|     /^|(  ___  )( (    /^|(  ____ echo ^| (   ) )^(    / )^| (   ) ^|^|    ( ^|^| (    /
+echo ^| (__/ /   (_) / ^| (___) ^|^|    ^| ^|^| (__
+echo ^|  __ (    ) _ (  ^|  ___  ^|^| ( ) ^|^|  __)
+echo ^| (     / ( )  ^| (   ) ^|^| ^|    ^|^| (
+echo ^| )___) )^( /    )^| )   ( ^|^| )    ^|^| (____/echo ^|/ ___/ ^|/     ^|^|/     ^|^|/    )_)^(_______/
+echo                          bxane
 echo.
 exit /b 0
 
