@@ -19,6 +19,7 @@ if not errorlevel 1 (
 >>"%START_LOG%" echo.
 chcp 65001 >nul 2>&1
 call :ensure_bxane_banner
+if errorlevel 1 goto :fail
 >>"%START_LOG%" echo Banner file: %CD%\BXANE.txt
 if exist "BXANE.txt" (
   >>"%START_LOG%" echo --- BXANE.txt ---
@@ -296,6 +297,17 @@ for %%V in (314 313 312 311) do (
 )
 
 exit /b 1
+
+:ensure_bxane_banner
+set "BXANE_B64=IF9fX19fXyAgICAgICAgICAgIF9fX19fX18gIF8gICAgICAgIF9fX19fX18KKCAgX19fIFwgfFwgICAgIC98KCAgX19fICApKCAoICAgIC98KCAgX19fXyBcCnwgKCAgICkgKSggXCAgIC8gKXwgKCAgICkgfHwgIFwgICggfHwgKCAgICBcLwp8IChfXy8gLyAgXCAoXykgLyB8IChfX18pIHx8ICAgXCB8IHx8IChfXwp8ICBfXyAoICAgICkgXyAoICB8ICBfX18gIHx8IChcIFwpIHx8ICBfXykKfCAoICBcIFwgIC8gKCApIFwgfCAoICAgKSB8fCB8IFwgICB8fCAoCnwgKV9fXykgKSggLyAgIFwgKXwgKSAgICggfHwgKSAgXCAgfHwgKF9fX18vXAp8LyBcX19fLyB8LyAgICAgXHx8LyAgICAgXHx8LyAgICApXykoX19fX19fXy8KICAgICAgICAgICAgICAgICAgICAgICAgIGJ4YW5lCg=="
+set "BXANE_BANNER_PATH=%~dp0BXANE.txt"
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; [IO.File]::WriteAllBytes($env:BXANE_BANNER_PATH,[Convert]::FromBase64String($env:BXANE_B64))" >>"%START_LOG%" 2>&1
+if errorlevel 1 (
+  set "FAIL_REASON=Could not restore BXANE banner"
+  exit /b 1
+)
+exit /b 0
+
 
 :sticky_banner
 set "BXANE_STICKY=0"
