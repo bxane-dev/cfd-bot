@@ -556,6 +556,7 @@ def streamer_signal(cfg: dict, market: Market, *, force_refresh: bool = False) -
             "platform_status": {},
             "matched_creators": 0,
             "lookup_succeeded": False,
+            "lookup_complete": False,
             "fallback_without_streamers": False,
             "errors": [],
         }
@@ -628,22 +629,27 @@ def streamer_signal(cfg: dict, market: Market, *, force_refresh: bool = False) -
     result = consensus_from_items(items, cfg)
     matched_creators = _unique_creator_count(items)
     lookup_succeeded = any(bool(row.get("ok")) for row in status.values() if isinstance(row, dict))
+    lookup_complete = bool(platforms) and all(
+        bool((status.get(platform) or {}).get("ok"))
+        for platform in platforms
+    )
     fallback_enabled = bool(scfg.get("fallback_if_no_matching_creators", True))
     fallback_without_streamers = bool(
         fallback_enabled
-        and lookup_succeeded
+        and lookup_complete
         and matched_creators == 0
     )
     result["matched_creators"] = matched_creators
     result["lookup_succeeded"] = lookup_succeeded
+    result["lookup_complete"] = lookup_complete
     result["fallback_without_streamers"] = fallback_without_streamers
     if fallback_without_streamers:
         result["reason"] = (
             "no matching creators found on available platforms — "
             "fallback without creator gate; search will be retried"
         )
-    elif not lookup_succeeded:
-        result["reason"] = "creator lookup unavailable on all configured platforms"
+    elif not lookup_complete:
+        result["reason"] = "creator lookup incomplete — all configured platforms must be checked before fallback"
     result["query"] = query
     result["errors"] = errors
     result["platform_status"] = status
