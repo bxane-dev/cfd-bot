@@ -315,14 +315,7 @@ for %%V in (314 313 312 311) do (
 exit /b 1
 
 :show_bxane_ascii
-echo  ______            _______  _        _______
-echo (  ___  ^|     /^|(  ___  )( (    /^|(  ____ echo ^| (   ) )^(    / )^| (   ) ^|^|    ( ^|^| (    /
-echo ^| (__/ /   (_) / ^| (___) ^|^|    ^| ^|^| (__
-echo ^|  __ (    ) _ (  ^|  ___  ^|^| ( ) ^|^|  __)
-echo ^| (     / ( )  ^| (   ) ^|^| ^|    ^|^| (
-echo ^| )___) )^( /    )^| )   ( ^|^| )    ^|^| (____/echo ^|/ ___/ ^|/     ^|^|/     ^|^|/    )_)^(_______/
-echo                          bxane
-echo.
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "[Console]::Write([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('IF9fX19fXyAgICAgICAgICAgIF9fX19fX18gIF8gICAgICAgIF9fX19fX18KKCAgX19fIFwgfFwgICAgIC98KCAgX19fICApKCAoICAgIC98KCAgX19fXyBcCnwgKCAgICkgKSggXCAgIC8gKXwgKCAgICkgfHwgIFwgICggfHwgKCAgICBcLwp8IChfXy8gLyAgXCAoXykgLyB8IChfX18pIHx8ICAgXCB8IHx8IChfXwp8ICBfXyAoICAgICkgXyAoICB8ICBfX18gIHx8IChcIFwpIHx8ICBfXykKfCAoICBcIFwgIC8gKCApIFwgfCAoICAgKSB8fCB8IFwgICB8fCAoCnwgKV9fXykgKSggLyAgIFwgKXwgKSAgICggfHwgKSAgXCAgfHwgKF9fX18vXAp8LyBcX19fLyB8LyAgICAgXHx8LyAgICAgXHx8LyAgICApXykoX19fX19fXy8KICAgICAgICAgICAgICAgICAgICAgICAgIGJ4YW5lCg==')))"
 exit /b 0
 
 :reset_scroll_region
