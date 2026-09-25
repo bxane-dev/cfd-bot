@@ -4,6 +4,7 @@ cd /d "%~dp0"
 title CFD Bot - Capital.com LIVE
 
 chcp 65001 >nul 2>&1
+call :ensure_bxane_banner
 call :sticky_banner
 
 if not exist ".git" (
