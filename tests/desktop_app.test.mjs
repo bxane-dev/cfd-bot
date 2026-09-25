@@ -37,14 +37,14 @@ test('Windows build emits installer and portable app with custom icon', () => {
   assert.match(buildBat, /app-icon\.ico/i);
   assert.match(buildBat, /PyInstaller/i);
   assert.match(buildBat, /--windowed/i);
-  assert.match(buildBat, /npm run dist:win/i);
+  assert.match(buildBat, /run dist:win/i);
 });
 
 
 test('one-click build.bat delegates to the complete Windows build', () => {
   assert.match(buildShortcut, /call BUILD_APP\.bat/i);
   assert.match(buildBat, /--windowed/i);
-  assert.match(buildBat, /windows app icon/i);
+  assert.match(buildBat, /Generating Windows icon/i);
 });
 
 
