@@ -1,0 +1,68 @@
+{
+  "name": "cfd-desk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CFD Desk desktop application with bundled hidden CFD engine",
+  "main": "desktop/main.js",
+  "author": "bxane",
+  "scripts": {
+    "start": "electron .",
+    "test:desktop": "node --test tests/desktop_app.test.mjs",
+    "dist:win": "electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "dev.bxane.cfddesk",
+    "productName": "CFD Desk",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/main.js",
+      "desktop/preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/engine/cfd-engine.exe",
+        "to": "engine/cfd-engine.exe"
+      },
+      {
+        "from": "config.yaml",
+        "to": "templates/config.yaml"
+      },
+      {
+        "from": ".env.example",
+        "to": "templates/.env.example"
+      },
+      {
+        "from": "assets/app-icon.ico",
+        "to": "assets/app-icon.ico"
+      }
+    ],
+    "win": {
+      "icon": "assets/app-icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CFD Desk"
+    }
+  }
+}
