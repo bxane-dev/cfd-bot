@@ -15,7 +15,9 @@ from .base import AccountState, Fill, Position, utcnow
 DEMO_URL = "https://demo-api-capital.backend-capital.com"
 LIVE_URL = "https://api-capital.backend-capital.com"
 STREAM_URL = "wss://api-streaming-capital.backend-capital.com/connect"
-SESSION_STAMP = Path(__file__).resolve().parents[2] / "logs" / "capital_session_post.txt"
+PACKAGE_ROOT = Path(getattr(__import__("sys"), "_MEIPASS", Path(__file__).resolve().parents[2]))
+DATA_ROOT = Path(os.getenv("CFD_DATA_DIR") or PACKAGE_ROOT).resolve()
+SESSION_STAMP = DATA_ROOT / "logs" / "capital_session_post.txt"
 SESSION_MIN_INTERVAL = 1.10
 _SESSION_LOCK = threading.Lock()
 

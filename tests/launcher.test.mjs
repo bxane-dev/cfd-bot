@@ -87,7 +87,7 @@ test('launchers use the persistent console renderer so BXANE cannot scroll away'
     assert.match(launcher, /call :reset_scroll_region/i);
   }
   assert.match(sticky, /stdout=subprocess\.PIPE/);
-  assert.match(sticky, /\x1b\[H\x1b\[2J/);
+  assert.match(sticky, /\\x1b\[H\\x1b\[2J/);
   assert.match(sticky, /Child output is piped/);
   assert.match(sticky, /BANNER_PATH/);
 });

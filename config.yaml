@@ -33,7 +33,11 @@ execution:
     news:
       min_confidence: 0.68
     streamers:
-      majority_threshold: 0.67
+      # DEMO/PAPER execution requires creator agreement in addition to the
+      # normal technical/news/predictor/quality/risk checks.
+      majority_threshold: 0.70
+      require_consensus: true
+      veto_opposite: true
     quality:
       min_reward_risk: 1.00
       max_spread_stop_ratio: 0.25
@@ -106,6 +110,11 @@ markets:
   gbpjpy:
     enabled: true
     live_enabled: true
+live_confirmation:
+  # Pending real-money orders expire quickly so the desk approval cannot submit
+  # a stale setup after the market has moved away from the signal.
+  max_age_seconds: 60
+
 manual_trade_protection:
   enabled: true
   # Never modify a manual position's SL/TP until the dashboard user explicitly
@@ -333,18 +342,40 @@ auto:
     - inside_bar
 
 streamers:
-  # Public YouTube creator consensus. It can confirm/veto a technical setup,
-  # but it never creates an order by itself.
+  # Public creator consensus from YouTube + Twitch + Kick. It never creates an
+  # order by itself. Both DEMO and LIVE re-check it on every eligible setup.
   enabled: true
+  platforms:
+    - youtube
+    - twitch
+    - kick
   refresh_seconds: 60
   max_results: 20
   recent_only: true
   max_age_hours: 12
   min_sources: 3
-  majority_threshold: 0.60
-  require_consensus: false
+  majority_threshold: 0.70
+  # Only a successful zero-match search may fall back without creator mode.
+  # API outages and partial/weak/opposite consensus still block creator-required setups.
+  fallback_if_no_matching_creators: true
+  # Require every configured platform lookup to succeed before creator data can
+  # confirm a trade or qualify for the zero-match fallback.
+  require_complete_platform_check: true
+  # LIVE and DEMO both require the same-direction creator majority, but LIVE
+  # still requires an explicit human confirmation before broker submission.
+  require_consensus: true
   veto_opposite: true
   channels: []
+  twitch:
+    max_results: 25
+    # Extra live-channel searches used in addition to the exact market name.
+    extra_queries:
+      - Stocks
+      - Trading
+  kick:
+    # KICK v2 allows up to 1000 active livestreams per page. Keep this lower
+    # for a faster local scan and filter titles/tags to the current market.
+    directory_limit: 300
 
 quality:
   # Entry-quality filter: aims to skip weak setups rather than increase risk.

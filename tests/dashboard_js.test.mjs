@@ -11,3 +11,26 @@ test('dashboard inline JavaScript parses', () => {
   assert.ok(scripts.length > 0, 'dashboard script missing');
   for (const script of scripts) new vm.Script(script);
 });
+
+
+test('live trade confirmation modal is wired to the token-protected API', () => {
+  assert.match(html, /id="live-confirm"/);
+  assert.match(html, /Approve &amp; send LIVE order/);
+  assert.match(html, /\/api\/live-order\?/);
+  assert.match(html, /decision=approve|decision/);
+});
+
+
+test('SL TP protection modal is wired to explicit dashboard confirmation', () => {
+  assert.match(html, /id="protection-confirm"/);
+  assert.match(html, /Apply SL \/ TP/);
+  assert.match(html, /Keep current/);
+  assert.match(html, /\/api\/protection\?/);
+  assert.doesNotMatch(html, /Apply bot-proposed SL .*confirm\(/);
+});
+
+
+test('top-left bxane author link is present and clickable', () => {
+  assert.match(html, /class="brand-author"/);
+  assert.match(html, /Author:\s*<a[^>]+href="https:\/\/guns\.lol\/bxane"[^>]*>bxane<\/a>/i);
+});

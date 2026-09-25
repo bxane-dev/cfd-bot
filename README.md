@@ -11,8 +11,9 @@ Capital.com CFD bot + local trading desk for **21 strategy-mapped markets**.
 - Capital.com **demo + live** trading.
 - 21 markets with a dedicated strategy per market.
 - Equity/portfolio-based position sizing and SL/TP.
-- One-time SL/TP sync for new manual trades using the bot recommendation.
-- Spread, news, predictor, quality, margin, position, and duplicate-order gates.
+- One-time SL/TP sync for new manual trades using the bot recommendation, always behind an explicit CFD Desk confirmation popup.
+- Spread, news, predictor, creator-consensus, quality, margin, position, and duplicate-order gates.
+- Cross-platform creator consensus from YouTube, Twitch, and Kick; DEMO and LIVE entries require a >=70% same-direction majority when at least 3 directional creators are found. If all configured platforms are checked successfully and zero relevant creators exist, the bot falls back to the normal non-streamer gates and searches again on the next eligible setup.
 - Fast local desk with Capital.com **WebSocket price streaming** and REST fallback.
 - Local trading memory, trade/equity logs, walk-forward analysis, and tuning.
 
@@ -35,6 +36,17 @@ CAPITAL_ACCOUNT_ID=
 
 `CAPITAL_ACCOUNT_ID` is optional.
 
+For Twitch/Kick creator discovery, create developer apps on those platforms and add:
+
+```text
+TWITCH_CLIENT_ID=
+TWITCH_CLIENT_SECRET=
+KICK_CLIENT_ID=
+KICK_CLIENT_SECRET=
+```
+
+YouTube needs no API key in this build. Missing Twitch/Kick credentials are treated as unavailable sources, not as votes.
+
 ### Terminal
 
 ```bash
@@ -47,6 +59,27 @@ Live:
 ```bash
 python -m app.main --mode live
 ```
+
+
+## Desktop app build
+
+CFD Desk can be built as a single Windows desktop application. The Electron window is the only visible app; the bundled Python CFD engine starts automatically and runs hidden in the background.
+
+On Windows, double-click:
+
+```text
+build.bat
+```
+
+The build script automatically:
+
+- prepares Python and Node.js build dependencies;
+- regenerates the Windows `.ico` from the supplied CFD artwork stored in `assets/app-icon.b64`;
+- packages the Python trading engine with PyInstaller using `--windowed` so no engine console appears;
+- bundles the hidden engine into CFD Desk;
+- creates an installer and portable Windows EXE under `release/`.
+
+The desktop app stores its writable `.env`, `config.yaml`, logs, and state in its Windows application-data folder so the installed program files remain read-only.
 
 ## Risk
 
@@ -104,6 +137,8 @@ Times are **Europe/Zurich / Swiss time**. These are the main high-activity windo
 
 Every order still has to pass the bot's strategy and risk filters.
 
+Creator consensus is an additional entry gate in both DEMO and LIVE: the technical direction must match a >=70% majority across the directional creators found from YouTube/Twitch/Kick. Each eligible setup forces a fresh creator search. If every configured platform check succeeds but no relevant creator is found, the bot falls back to the normal non-streamer gates for that setup and checks creators again on the next eligible scan. Partial platform/API failures do not qualify for fallback. LIVE queues the qualified order in the CFD Desk and requires an explicit **Approve & send LIVE order** click before anything is submitted to Capital.com. Approval performs another fresh creator search plus current risk, spread, position-limit, sizing, and SL/TP-geometry checks.
+
 ## Desk
 
 - WebSocket prices when available.
@@ -112,6 +147,8 @@ Every order still has to pass the bot's strategy and risk filters.
 - Trades/activity refresh: **5 s**.
 - Charts refresh: **10 s**.
 - Shows the exact no-trade reason per market.
+- Shows a blocking LIVE-order approval popup with market, side, size, signal price, SL, TP, estimated risk, creator consensus, platform vote counts, and expiry countdown.
+- Shows a separate blocking SL/TP protection popup. Broker SL/TP changes are never applied automatically; choose **Apply SL / TP** or **Keep current**.
 - Dashboard is localhost-only by default.
 
 To expose it to your trusted LAN:

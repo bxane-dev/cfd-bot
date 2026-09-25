@@ -16,8 +16,9 @@ from urllib.parse import parse_qs, urlparse
 
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parents[1]
-WEB = ROOT / "web"
+PACKAGE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+ROOT = Path(os.getenv("CFD_DATA_DIR") or PACKAGE_ROOT).resolve()
+WEB = PACKAGE_ROOT / "web"
 load_dotenv(ROOT / ".env")
 HOST = os.getenv("CFD_WEB_HOST", "127.0.0.1").strip() or "127.0.0.1"
 PORT = 8484
@@ -128,6 +129,19 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/reset-day":
             _json(self, 200, desk.reset_daily_loss())
+            return
+        if path == "/api/live-order":
+            q = parse_qs(urlparse(self.path).query)
+            order_id = str((q.get("order_id") or [""])[0]).strip()
+            decision = str((q.get("decision") or [""])[0]).strip().lower()
+            if not order_id or decision not in {"approve", "reject"}:
+                _json(self, 400, {"error": "order_id and decision=approve|reject are required"})
+                return
+            _json(
+                self,
+                200,
+                desk.resolve_live_order(order_id, approve=(decision == "approve")),
+            )
             return
         if path == "/api/protection":
             q = parse_qs(urlparse(self.path).query)

@@ -96,6 +96,26 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .brand-author {
+      margin-top: 3px;
+      color: var(--muted-2);
+      font-size: 10px;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .brand-author a {
+      color: #b8c6d8;
+      font-weight: 760;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(184,198,216,.25);
+      transition: color .12s ease, border-color .12s ease;
+    }
+    .brand-author a:hover,
+    .brand-author a:focus-visible {
+      color: #ffffff;
+      border-color: rgba(255,255,255,.72);
+      outline: none;
+    }
 
     .top-status {
       display: flex;
@@ -800,6 +820,114 @@
     td { color: #aeb9c8; }
     td:first-child { color: var(--muted); }
 
+    .live-confirm {
+      position: fixed;
+      inset: 0;
+      z-index: 120;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(2,4,7,.9);
+      backdrop-filter: blur(10px);
+    }
+    .live-confirm.open { display: flex; }
+    .protection-confirm { z-index: 110; }
+    .live-confirm-card {
+      width: min(520px, 100%);
+      overflow: hidden;
+      border: 1px solid rgba(255,102,122,.42);
+      border-radius: 18px;
+      background: #0c1017;
+      box-shadow: 0 26px 80px rgba(0,0,0,.52);
+    }
+    .live-confirm-head {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .live-confirm-kicker {
+      color: #ff9eab;
+      font-size: 10px;
+      font-weight: 820;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+    .live-confirm-title {
+      margin: 7px 0 0;
+      color: #f3f6fb;
+      font-size: 22px;
+      line-height: 1.15;
+    }
+    .live-confirm-sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .live-confirm-body { padding: 16px 18px 18px; }
+    .live-confirm-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .live-confirm-cell {
+      padding: 10px;
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: #0a0e14;
+    }
+    .live-confirm-cell .k {
+      color: var(--muted-2);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .live-confirm-cell .v {
+      margin-top: 4px;
+      color: #dce4ef;
+      font-size: 13px;
+      font-weight: 740;
+    }
+    .live-confirm-consensus {
+      margin-top: 10px;
+      padding: 11px;
+      border: 1px solid rgba(53,208,127,.24);
+      border-radius: 10px;
+      background: rgba(53,208,127,.06);
+      color: #b8c6d8;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+    .live-confirm-warning {
+      margin-top: 10px;
+      color: #ffb0bb;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+    .live-confirm-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .live-confirm-actions .btn {
+      min-height: 42px;
+      justify-content: center;
+    }
+    .live-confirm-approve {
+      border-color: rgba(53,208,127,.42) !important;
+      background: rgba(53,208,127,.12) !important;
+      color: #a9f0c8 !important;
+    }
+    .live-confirm-reject {
+      border-color: rgba(255,102,122,.34) !important;
+      color: #ffadb8 !important;
+    }
+    @media (max-width: 520px) {
+      .live-confirm-grid { grid-template-columns: 1fr; }
+      .live-confirm-actions { grid-template-columns: 1fr; }
+    }
+
     .inspect {
       position: fixed;
       inset: 0;
@@ -914,6 +1042,7 @@
       </div>
       <div class="brand-copy">
         <h1 class="brand">CFD DESK</h1>
+        <div class="brand-author">Author: <a href="https://guns.lol/bxane" target="_blank" rel="noopener noreferrer" aria-label="Open bxane profile">bxane</a></div>
         <div class="brand-sub">Capital.com · Berlin <span id="berlin">--:--</span> · <span id="last-update">waiting for data</span></div>
       </div>
     </div>
@@ -1044,6 +1173,57 @@
 
   <footer class="signature">Built by <a href="https://guns.lol/bxane" target="_blank" rel="noopener noreferrer">bxane</a></footer>
 
+  <div class="live-confirm protection-confirm" id="protection-confirm" role="dialog" aria-modal="true" aria-labelledby="protection-confirm-title">
+    <div class="live-confirm-card">
+      <div class="live-confirm-head">
+        <div class="live-confirm-kicker">SL / TP protection change</div>
+        <h2 class="live-confirm-title" id="protection-confirm-title">Protection approval required</h2>
+        <div class="live-confirm-sub">The broker position is not modified until you explicitly approve.</div>
+      </div>
+      <div class="live-confirm-body">
+        <div class="live-confirm-grid">
+          <div class="live-confirm-cell"><div class="k">Current SL</div><div class="v" id="protection-current-sl">—</div></div>
+          <div class="live-confirm-cell"><div class="k">New SL</div><div class="v" id="protection-new-sl">—</div></div>
+          <div class="live-confirm-cell"><div class="k">Current TP</div><div class="v" id="protection-current-tp">—</div></div>
+          <div class="live-confirm-cell"><div class="k">New TP</div><div class="v" id="protection-new-tp">—</div></div>
+          <div class="live-confirm-cell"><div class="k">Side / size</div><div class="v" id="protection-side-size">—</div></div>
+          <div class="live-confirm-cell"><div class="k">Estimated risk</div><div class="v" id="protection-risk">—</div></div>
+        </div>
+        <div class="live-confirm-warning">No automatic SL/TP modification occurs. Apply changes or keep the current broker protection.</div>
+        <div class="live-confirm-actions">
+          <button class="btn live-confirm-approve" id="protection-apply-btn" onclick="protectionDecision('apply')">Apply SL / TP</button>
+          <button class="btn live-confirm-reject" id="protection-keep-btn" onclick="protectionDecision('keep')">Keep current</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="live-confirm" id="live-confirm" role="dialog" aria-modal="true" aria-labelledby="live-confirm-title">
+    <div class="live-confirm-card">
+      <div class="live-confirm-head">
+        <div class="live-confirm-kicker">Live real-money order</div>
+        <h2 class="live-confirm-title" id="live-confirm-title">Trade approval required</h2>
+        <div class="live-confirm-sub" id="live-confirm-sub">Nothing is sent to Capital.com until you approve this order.</div>
+      </div>
+      <div class="live-confirm-body">
+        <div class="live-confirm-grid">
+          <div class="live-confirm-cell"><div class="k">Side</div><div class="v" id="live-side">—</div></div>
+          <div class="live-confirm-cell"><div class="k">Size</div><div class="v" id="live-lots">—</div></div>
+          <div class="live-confirm-cell"><div class="k">Signal price</div><div class="v" id="live-price">—</div></div>
+          <div class="live-confirm-cell"><div class="k">Risk</div><div class="v" id="live-risk">—</div></div>
+          <div class="live-confirm-cell"><div class="k">Stop loss</div><div class="v" id="live-sl">—</div></div>
+          <div class="live-confirm-cell"><div class="k">Take profit</div><div class="v" id="live-tp">—</div></div>
+        </div>
+        <div class="live-confirm-consensus" id="live-consensus">Creator consensus —</div>
+        <div class="live-confirm-warning" id="live-expiry">This approval expires automatically if the setup becomes stale.</div>
+        <div class="live-confirm-actions">
+          <button class="btn live-confirm-approve" id="live-approve-btn" onclick="liveOrderDecision('approve')">Approve &amp; send LIVE order</button>
+          <button class="btn live-confirm-reject" id="live-reject-btn" onclick="liveOrderDecision('reject')">Reject order</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="inspect" id="inspect" onclick="if(event.target.id==='inspect') closeInspect()">
     <div class="inspect-card">
       <div class="inspect-head">
@@ -1077,6 +1257,8 @@
       lastCharts: null,
       hover: {},
       inspectKey: null,
+      liveOrderId: null,
+      protectionDealId: null,
       busy: false,
       statusBusy: false,
       chartsBusy: false,
@@ -1128,7 +1310,7 @@
 
     function setBusy(value) {
       state.busy = value;
-      ['scan-btn','start-btn','stop-btn','reset-btn'].forEach(id => {
+      ['scan-btn','start-btn','stop-btn','reset-btn','live-approve-btn','live-reject-btn','protection-apply-btn','protection-keep-btn'].forEach(id => {
         const el = $(id);
         if (el) el.disabled = value;
       });
@@ -1436,6 +1618,88 @@
       });
     }
 
+    function renderLiveOrderConfirmation(orders, currency) {
+      const list = Array.isArray(orders) ? orders : [];
+      const modal = $('live-confirm');
+      if (!modal) return;
+      if (!list.length) {
+        state.liveOrderId = null;
+        modal.classList.remove('open');
+        return;
+      }
+
+      const order = list[0] || {};
+      state.liveOrderId = String(order.id || '');
+      const crowd = order.creator_consensus || {};
+      const confidence = Number(crowd.confidence || 0);
+      const buys = Number(crowd.buy_votes || 0);
+      const sells = Number(crowd.sell_votes || 0);
+      const votes = Number(crowd.votes || 0);
+      const platformCounts = crowd.platform_counts || {};
+      const platformText = Object.entries(platformCounts)
+        .filter(([, count]) => Number(count) > 0)
+        .map(([name, count]) => name.toUpperCase() + ' ' + count)
+        .join(' · ');
+
+      $('live-confirm-title').textContent =
+        String(order.market_name || order.market || 'Market') + ' · ' +
+        String(order.side || '').toUpperCase();
+      $('live-confirm-sub').textContent =
+        (list.length > 1 ? (list.length + ' pending orders · ') : '') +
+        'Strategy ' + String(order.strategy || '—') +
+        ' · nothing is sent until you approve.';
+      $('live-side').textContent = String(order.side || '—').toUpperCase();
+      $('live-lots').textContent = shortNumber(order.lots, 8);
+      $('live-price').textContent = shortNumber(order.signal_price, 6);
+      $('live-risk').textContent = money(order.risk_cash, order.currency || currency);
+      $('live-sl').textContent = shortNumber(order.sl, 6);
+      $('live-tp').textContent = shortNumber(order.tp, 6);
+      $('live-consensus').textContent = crowd.fallback_without_streamers
+        ? 'No matching creators found · FALLBACK WITHOUT STREAMERS · a fresh creator search runs again when you approve'
+        : (
+          'Creator consensus ' + Math.round(confidence * 100) + '% · ' +
+          buys + ' BUY / ' + sells + ' SELL · ' + votes + ' creators' +
+          (platformText ? ' · ' + platformText : '')
+        );
+
+      const expires = new Date(order.expires_time || '');
+      const ms = expires.getTime() - Date.now();
+      const seconds = Number.isFinite(ms) ? Math.max(0, Math.ceil(ms / 1000)) : null;
+      $('live-expiry').textContent = seconds == null
+        ? 'Approval expires if the setup becomes stale. Risk and price are rechecked when you approve.'
+        : 'Expires in ' + seconds + 's · risk, spread, position limits and current price are rechecked on approval.';
+
+      modal.classList.add('open');
+    }
+
+    function renderProtectionConfirmation(positions, currency) {
+      const list = Array.isArray(positions) ? positions : [];
+      const pending = list.find(p => p && p.protection_proposal && typeof p.protection_proposal === 'object');
+      const modal = $('protection-confirm');
+      if (!modal) return;
+      if (!pending) {
+        state.protectionDealId = null;
+        modal.classList.remove('open');
+        return;
+      }
+
+      const proposal = pending.protection_proposal || {};
+      const portfolio = proposal.portfolio || {};
+      state.protectionDealId = String(pending.deal_id || '');
+      $('protection-confirm-title').textContent =
+        String(pending.market || pending.symbol || 'Position') + ' · SL / TP';
+      $('protection-current-sl').textContent = shortNumber(proposal.current_sl || pending.sl, 6);
+      $('protection-new-sl').textContent = shortNumber(proposal.sl, 6);
+      $('protection-current-tp').textContent = shortNumber(proposal.current_tp || pending.tp, 6);
+      $('protection-new-tp').textContent = shortNumber(proposal.tp, 6);
+      $('protection-side-size').textContent =
+        String(pending.side || proposal.side || '—').toUpperCase() + ' · ' +
+        shortNumber(pending.lots, 8);
+      const riskCash = portfolio.estimated_risk_cash ?? portfolio.risk_cash;
+      $('protection-risk').textContent = riskCash == null ? '—' : money(riskCash, pending.pnl_currency || currency);
+      modal.classList.add('open');
+    }
+
     function renderPositions(positions, currency) {
       const list = Array.isArray(positions) ? positions : [];
       $('positions-count').textContent = list.length;
@@ -1451,19 +1715,14 @@
         const proposal = p.protection_proposal && typeof p.protection_proposal === 'object'
           ? p.protection_proposal
           : null;
-        const dealEncoded = encodeURIComponent(String(p.deal_id || ''));
         const proposedSl = proposal ? Number(proposal.sl) : NaN;
         const proposedTp = proposal ? Number(proposal.tp) : NaN;
         const protectionHtml = proposal && Number.isFinite(proposedSl) && Number.isFinite(proposedTp) ? `
           <div class="protection-prompt">
-            <div class="protection-prompt-title">SL/TP confirmation required</div>
+            <div class="protection-prompt-title">SL/TP approval pending</div>
             <div class="protection-prompt-copy">
-              Bot proposes SL <strong>${esc(proposal.sl)}</strong> and TP <strong>${esc(proposal.tp)}</strong>.
-              Nothing changes until you confirm.
-            </div>
-            <div class="protection-actions">
-              <button class="btn btn-primary" onclick="protectionDecision('${dealEncoded}', 'apply', ${proposedSl}, ${proposedTp})">Apply SL/TP</button>
-              <button class="btn" onclick="protectionDecision('${dealEncoded}', 'keep', ${proposedSl}, ${proposedTp})">Keep current</button>
+              Proposed SL <strong>${esc(proposal.sl)}</strong> · TP <strong>${esc(proposal.tp)}</strong>.
+              The CFD Desk confirmation popup must be approved before the broker position changes.
             </div>
           </div>
         ` : '';
@@ -1622,6 +1881,8 @@
 
       renderPositions(s.positions || [], s.currency);
       renderMarketWatch(s.markets || []);
+      renderProtectionConfirmation(s.positions || [], s.currency);
+      renderLiveOrderConfirmation(s.pending_live_orders || [], s.currency);
 
       // Keep chart headers on the streaming quote even while candle history
       // refreshes on a slower cadence.
@@ -1794,13 +2055,33 @@
     function start() { return runAction('start-btn', '/api/start'); }
     function stop() { return runAction('stop-btn', '/api/stop'); }
 
-    async function protectionDecision(dealEncoded, decision, sl, tp) {
-      const dealId = decodeURIComponent(String(dealEncoded || ''));
-      if (!dealId) return;
-      if (decision === 'apply') {
-        if (!confirm(`Apply bot-proposed SL ${sl} and TP ${tp}?\n\nThe position is unchanged unless you confirm.`)) return;
+    async function liveOrderDecision(decision) {
+      if (state.busy || !state.liveOrderId) return;
+      setBusy(true);
+      showError('');
+      try {
+        const qs = new URLSearchParams({
+          order_id: state.liveOrderId,
+          decision: String(decision || ''),
+        });
+        const status = await api('/api/live-order?' + qs.toString(), 'POST');
+        const result = status && status.live_order_result ? status.live_order_result : {};
+        renderStatus(status);
+        if (decision === 'approve' && !result.ok) {
+          showError(result.message || 'Live order was not submitted.');
+        }
+        await Promise.allSettled([refreshStatus(), refreshCharts(), refreshSlow()]);
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        setBusy(false);
       }
-      const qs = new URLSearchParams({ deal_id: dealId, decision });
+    }
+
+    async function protectionDecision(decision) {
+      const dealId = String(state.protectionDealId || '');
+      if (state.busy || !dealId) return;
+      const qs = new URLSearchParams({ deal_id: dealId, decision: String(decision || '') });
       return runAction('', '/api/protection?' + qs.toString());
     }
 

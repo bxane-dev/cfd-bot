@@ -140,10 +140,16 @@ The hardened simulator:
 Only after extended demo validation, explicitly run:
 
 ```bash
-python -m app.main --mode live
+python -m app.auto --mode live --skip-tune
 ```
 
-On Windows, use `START_LIVE.bat`. It shows the active risk settings and requires typing `LIVE` before connecting to the live endpoint.
+On Windows, use `START_LIVE.bat`. The launcher displays the active risk settings and performs the LIVE-account acknowledgement before starting.
+
+A LIVE setup is not submitted immediately. It must first pass the normal strategy, news, predictor, creator-consensus, quality, spread, position, sizing, and margin gates. Each eligible setup performs a fresh YouTube/Twitch/Kick creator search. When relevant creators exist, at least 70% directional agreement is required. If every configured platform check succeeds and zero relevant creators are found, that setup may fall back to the normal non-streamer gates; the next eligible scan checks creators again. A partial API/platform failure is not treated as a zero-creator fallback. The qualified order then appears as a blocking popup in the CFD Desk.
+
+The popup shows the market, direction, size, signal price, SL, TP, estimated cash risk, creator vote split, platform counts, and an expiry countdown. Choose **Approve & send LIVE order** to submit that specific order or **Reject order** to discard it. Approval performs another fresh creator search and rechecks current account risk, position limits, spread, sizing, and whether current price is still between the queued SL and TP. Pending approvals expire after 60 seconds by default.
+
+Manual-position SL/TP proposals use a separate CFD Desk confirmation popup. The bot never applies a broker SL/TP modification automatically, even if a configuration value attempts to disable confirmation. Choose **Apply SL / TP** to send the change or **Keep current** to leave the broker position unchanged.
 
 ## 12. Troubleshooting
 

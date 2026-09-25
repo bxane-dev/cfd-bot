@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import sqlite3
 import threading
@@ -12,7 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
+PACKAGE_ROOT = Path(getattr(__import__("sys"), "_MEIPASS", Path(__file__).resolve().parents[1]))
+ROOT = Path(os.getenv("CFD_DATA_DIR") or PACKAGE_ROOT).resolve()
 LOG_DIR = ROOT / "logs"
 MEM_PATH = LOG_DIR / "memory.jsonl"
 DB_PATH = LOG_DIR / "memory.db"
