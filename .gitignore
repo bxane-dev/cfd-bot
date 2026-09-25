@@ -23,3 +23,11 @@ htmlcov/
 Thumbs.db
 .vscode/
 .idea/
+
+# Desktop build outputs
+.build-venv/
+build/
+release/
+node_modules/
+assets/app-icon.ico
+cfd-engine.spec
