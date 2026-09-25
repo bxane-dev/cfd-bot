@@ -41,7 +41,15 @@ def _banner() -> list[str]:
     try:
         text = BANNER_PATH.read_text(encoding="utf-8").rstrip("\r\n")
     except Exception:
-        text = "BXANE"
+        text = """ ______            _______  _        _______
+(  ___ \\ |\\     /|(  ___  )( (    /|(  ____ \\
+| (   ) )( \\   / )| (   ) ||  \\  ( || (    \\/
+| (__/ /  \\ (_) / | (___) ||   \\ | || (__
+|  __ (    ) _ (  |  ___  || (\\ \\) ||  __)
+| (  \\ \\  / ( ) \\ | (   ) || | \\   || (
+| )___) )( /   \\ )| )   ( || )  \\  || (____/\\
+|/ \\___/ |/     \\||/     \\||/    )_)(_______/
+                         bxane"""
     lines = text.splitlines() or ["BXANE"]
     if not any(PROFILE_URL in line for line in lines):
         lines.append("                    " + PROFILE_URL)
