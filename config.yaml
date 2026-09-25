@@ -142,7 +142,7 @@ account:
   leverage: 20
 
 risk:
-  risk_per_trade_pct: 0.7
+  risk_per_trade_pct: 5.0
 
   # Small-account bootstrap. Designed for a roughly CHF 50 starting account.
   # Keep a drawdown buffer so a tiny move below 50 does not freeze all entries.
@@ -151,8 +151,8 @@ risk:
     enabled: true
     min_equity: 40.0
     target_equity: 200.0
-    risk_per_trade_pct: 2.0
-    max_min_lot_risk_pct: 4.0
+    risk_per_trade_pct: 5.0
+    max_min_lot_risk_pct: 5.0
     max_portfolio_allocation_pct: 80.0
     max_open_positions: 3
     max_positions_per_market: 2
