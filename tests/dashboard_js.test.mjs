@@ -28,3 +28,9 @@ test('SL TP protection modal is wired to explicit dashboard confirmation', () =>
   assert.match(html, /\/api\/protection\?/);
   assert.doesNotMatch(html, /Apply bot-proposed SL .*confirm\(/);
 });
+
+
+test('top-left bxane author link is present and clickable', () => {
+  assert.match(html, /class="brand-author"/);
+  assert.match(html, /Author:\s*<a[^>]+href="https:\/\/guns\.lol\/bxane"[^>]*>bxane<\/a>/i);
+});
