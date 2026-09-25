@@ -229,6 +229,59 @@ class RuntimeRegressionTests(unittest.TestCase):
         self.assertFalse(changed_again)
         self.assertEqual(len(calls), 1)
 
+    def test_sl_tp_confirmation_cannot_be_disabled_by_config(self):
+        calls = []
+
+        class Broker:
+            def modify_position(self, *args, **kwargs):
+                calls.append((args, kwargs))
+                raise AssertionError("SL/TP must never auto-modify without desk approval")
+
+        state = {
+            "manual_protection_initialized": True,
+            "bot_deal_ids": {},
+            "manual_protection": {},
+            "pending_manual_protection": {},
+            "recommendations": {
+                "gold": {
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "market": "gold",
+                    "side": "buy",
+                    "sl": 98.0,
+                    "tp": 106.0,
+                }
+            },
+        }
+        cfg = {
+            "manual_trade_protection": {
+                "enabled": True,
+                "require_confirmation": False,
+                "portfolio_based": False,
+                "max_recommendation_age_seconds": 300,
+                "require_matching_side": True,
+                "ignore_existing_on_first_start": True,
+            }
+        }
+        pos = Position(
+            ticket=126,
+            symbol="GOLD",
+            side="buy",
+            lots=0.01,
+            entry=100.0,
+            sl=97.0,
+            tp=109.0,
+            deal_id="manual-mandatory-confirm",
+        )
+
+        changed = sync_manual_trade_protection(cfg, Broker(), state, [pos])
+        self.assertTrue(changed)
+        self.assertEqual(calls, [])
+        self.assertIn("manual-mandatory-confirm", state["pending_manual_protection"])
+        self.assertEqual(
+            state["pending_manual_protection"]["manual-mandatory-confirm"]["status"],
+            "awaiting_confirmation",
+        )
+
     def test_manual_trade_sl_tp_decline_keeps_position_unchanged(self):
         calls = []
 
